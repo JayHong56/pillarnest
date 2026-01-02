@@ -1,14 +1,13 @@
 {
   "design": {
     "design_info": {
-      "boundary_crc": "0xD6E162D086544D54",
+      "boundary_crc": "0xEEA8BCA01735F51F",
       "device": "xc7z020clg484-1",
       "gen_directory": "../../../../project_1.gen/sources_1/bd/design_1",
       "name": "design_1",
       "rev_ctrl_bd_flag": "RevCtrlBdOff",
-      "synth_flow_mode": "Hierarchical",
-      "tool_version": "2022.2",
-      "validated": "true"
+      "synth_flow_mode": "None",
+      "tool_version": "2022.2"
     },
     "design_tree": {
       "axi_datamover_0": "",
@@ -18,7 +17,10 @@
         "s00_couplers": {},
         "s01_couplers": {},
         "m00_couplers": {}
-      }
+      },
+      "blk_mem_gen_0": "",
+      "blk_mem_gen_1": "",
+      "axi_mm2s_mapper_0": ""
     },
     "interface_ports": {
       "S_AXIS_S2MM": {
@@ -309,73 +311,6 @@
             "direction": "O"
           }
         }
-      },
-      "BRAM_PORTA_0": {
-        "mode": "Master",
-        "vlnv_bus_definition": "xilinx.com:interface:bram:1.0",
-        "vlnv": "xilinx.com:interface:bram_rtl:1.0",
-        "parameters": {
-          "MASTER_TYPE": {
-            "value": "BRAM_CTRL"
-          },
-          "MEM_ECC": {
-            "value": "NONE",
-            "value_src": "default"
-          },
-          "MEM_SIZE": {
-            "value": "16384",
-            "value_src": "default"
-          },
-          "MEM_WIDTH": {
-            "value": "128",
-            "value_src": "default"
-          },
-          "READ_LATENCY": {
-            "value": "1",
-            "value_src": "default"
-          },
-          "READ_WRITE_MODE": {
-            "value": "READ_WRITE"
-          }
-        },
-        "port_maps": {
-          "ADDR": {
-            "physical_name": "BRAM_PORTA_0_addr",
-            "direction": "O",
-            "left": "13",
-            "right": "0"
-          },
-          "CLK": {
-            "physical_name": "BRAM_PORTA_0_clk",
-            "direction": "O"
-          },
-          "DIN": {
-            "physical_name": "BRAM_PORTA_0_din",
-            "direction": "O",
-            "left": "127",
-            "right": "0"
-          },
-          "DOUT": {
-            "physical_name": "BRAM_PORTA_0_dout",
-            "direction": "I",
-            "left": "127",
-            "right": "0"
-          },
-          "EN": {
-            "physical_name": "BRAM_PORTA_0_en",
-            "direction": "O"
-          },
-          "RST": {
-            "physical_name": "BRAM_PORTA_0_rst",
-            "direction": "O"
-          },
-          "WE": {
-            "physical_name": "BRAM_PORTA_0_we",
-            "direction": "O",
-            "left": "15",
-            "right": "0"
-          }
-        }
       }
     },
     "ports": {
@@ -383,48 +318,14 @@
         "type": "clk",
         "direction": "I",
         "parameters": {
-          "ASSOCIATED_BUSIF": {
-            "value": "S_AXIS_S2MM:S_AXIS_S2MM_CMD:S_AXIS_MM2S_CMD:M_AXIS_MM2S",
-            "value_src": "default"
-          },
-          "ASSOCIATED_RESET": {
-            "value": "rst_n",
-            "value_src": "default"
-          },
-          "CLK_DOMAIN": {
-            "value": "design_1_clk",
-            "value_src": "default"
-          },
           "FREQ_HZ": {
             "value": "200000000"
-          },
-          "FREQ_TOLERANCE_HZ": {
-            "value": "0",
-            "value_src": "default"
-          },
-          "INSERT_VIP": {
-            "value": "0",
-            "value_src": "default"
-          },
-          "PHASE": {
-            "value": "0.0",
-            "value_src": "default"
           }
         }
       },
       "rst_n": {
         "type": "rst",
-        "direction": "I",
-        "parameters": {
-          "INSERT_VIP": {
-            "value": "0",
-            "value_src": "default"
-          },
-          "POLARITY": {
-            "value": "ACTIVE_LOW",
-            "value_src": "default"
-          }
-        }
+        "direction": "I"
       }
     },
     "components": {
@@ -883,6 +784,52 @@
             ]
           }
         }
+      },
+      "blk_mem_gen_0": {
+        "vlnv": "xilinx.com:ip:blk_mem_gen:8.4",
+        "xci_name": "design_1_blk_mem_gen_0_1",
+        "xci_path": "ip\\design_1_blk_mem_gen_0_1\\design_1_blk_mem_gen_0_1.xci",
+        "inst_hier_path": "blk_mem_gen_0",
+        "parameters": {
+          "Write_Width_A": {
+            "value": "128"
+          },
+          "use_bram_block": {
+            "value": "BRAM_Controller"
+          }
+        }
+      },
+      "blk_mem_gen_1": {
+        "vlnv": "xilinx.com:ip:blk_mem_gen:8.4",
+        "xci_name": "design_1_blk_mem_gen_1_0",
+        "xci_path": "ip\\design_1_blk_mem_gen_1_0\\design_1_blk_mem_gen_1_0.xci",
+        "inst_hier_path": "blk_mem_gen_1"
+      },
+      "axi_mm2s_mapper_0": {
+        "vlnv": "xilinx.com:ip:axi_mm2s_mapper:1.1",
+        "xci_name": "design_1_axi_mm2s_mapper_0_0",
+        "xci_path": "ip\\design_1_axi_mm2s_mapper_0_0\\design_1_axi_mm2s_mapper_0_0.xci",
+        "inst_hier_path": "axi_mm2s_mapper_0",
+        "interface_ports": {
+          "M_AXI": {
+            "vlnv": "xilinx.com:interface:aximm_rtl:1.0",
+            "mode": "Master",
+            "address_space_ref": "Bridge",
+            "base_address": {
+              "minimum": "0x00000000",
+              "maximum": "0xFFFFFFFF",
+              "width": "32"
+            }
+          }
+        },
+        "addressing": {
+          "address_spaces": {
+            "Bridge": {
+              "range": "4G",
+              "width": "32"
+            }
+          }
+        }
       }
     },
     "interface_nets": {
@@ -906,7 +853,7 @@
       },
       "axi_bram_ctrl_0_BRAM_PORTA": {
         "interface_ports": [
-          "BRAM_PORTA_0",
+          "blk_mem_gen_0/BRAM_PORTA",
           "axi_bram_ctrl_0/BRAM_PORTA"
         ]
       },

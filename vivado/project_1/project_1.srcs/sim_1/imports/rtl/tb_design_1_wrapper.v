@@ -25,7 +25,7 @@ wire        type = 1'b1;
 wire [5:0]  dsa  = 6'd0;
 wire        eof  = 1'b1;
 wire        drr  = 1'b0;
-wire [31:0] addr = 32'hc000_0000;
+wire [31:0] addr = 32'h0000_0000;
 wire [3:0]  tag  = 4'b0;
 wire [3:0]  rsvd = 4'b0;
 
@@ -184,7 +184,7 @@ always @(posedge clk) begin
 end
 
 
-// 写入16轮数据
+
 always @(posedge clk) begin
     if (rst_n == 1'b0) begin
         w_cnt <= 32'd0;
@@ -202,13 +202,41 @@ always @(posedge clk) begin
     end
 end
 
-assign S_AXIS_S2MM_tdata  = w_cnt;
+assign S_AXIS_S2MM_tdata  = {4{w_cnt}};
 assign S_AXIS_S2MM_tvalid = (curr_state == W_DATA) ? 1'b1 : 1'b0;
 assign S_AXIS_S2MM_tlast = w_cnt == 32'd15;
 
 assign M_AXIS_MM2S_tready = 1'b1;
 
+wire [13:0] BRAM_PORTA_0_addr;
+wire BRAM_PORTA_0_clk;
+wire [127:0] BRAM_PORTA_0_din;
+wire [127:0] BRAM_PORTA_0_dout;
+wire BRAM_PORTA_0_en;
+wire BRAM_PORTA_0_rst;
+wire [15:0] BRAM_PORTA_0_we;
+
+
+single_port_ram bram(
+    .clka(BRAM_PORTA_0_clk),          // Clock
+    .ena(BRAM_PORTA_0_en),           // Enable
+    .rsta(BRAM_PORTA_0_rst),          // Reset (sync)
+    .addra(BRAM_PORTA_0_addr),         // Address
+    .dina(BRAM_PORTA_0_din),          // Data in
+    .dout(BRAM_PORTA_0_dout),          // Data out
+    .wea(BRAM_PORTA_0_we)            // Byte write enable (16 bytes)
+);
+
+
 design_1_wrapper design_1_wrapper_inst
+      //  (.BRAM_PORTA_0_addr(BRAM_PORTA_0_addr),
+      //   .BRAM_PORTA_0_clk(BRAM_PORTA_0_clk),
+      //   .BRAM_PORTA_0_din(BRAM_PORTA_0_din),
+      //   .BRAM_PORTA_0_dout(BRAM_PORTA_0_dout),
+      //   .BRAM_PORTA_0_en(BRAM_PORTA_0_en),
+      //   .BRAM_PORTA_0_rst(BRAM_PORTA_0_rst),
+      //   .BRAM_PORTA_0_we(BRAM_PORTA_0_we),
+
        (.M_AXIS_MM2S_tdata(M_AXIS_MM2S_tdata),
         .M_AXIS_MM2S_tkeep(M_AXIS_MM2S_tkeep),
         .M_AXIS_MM2S_tlast(M_AXIS_MM2S_tlast),

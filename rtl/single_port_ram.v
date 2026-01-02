@@ -59,7 +59,7 @@ module single_port_ram (
 
     integer i;
     initial begin
-        $readmemb("E:/verilog/pillarnest/rtl/pointcloud/points_bits_32.txt", mem);
+        // $readmemb("E:/verilog/pillarnest/rtl/pointcloud/points_bits_32.txt", mem);
         // for(i=0; i < RAM_DEPTH; i = i + 1) begin
         //     mem[i] = 8'h00;
         // end

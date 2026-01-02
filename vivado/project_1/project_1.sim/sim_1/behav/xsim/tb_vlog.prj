@@ -1,9 +1,10 @@
 # compile verilog/system verilog design source files
 verilog xil_defaultlib  --include "../../../../project_1.gen/sources_1/bd/design_1/ipshared/ec67/hdl" \
-"../../../../project_1.ip_user_files/bd/design_1/ip/design_1_blk_mem_gen_0_0/sim/design_1_blk_mem_gen_0_0.v" \
 "../../../../project_1.ip_user_files/bd/design_1/ip/design_1_xbar_0/sim/design_1_xbar_0.v" \
 "../../../../project_1.ip_user_files/bd/design_1/sim/design_1.v" \
+"../../../../project_1.ip_user_files/bd/design_1/ip/design_1_blk_mem_gen_0_1/sim/design_1_blk_mem_gen_0_1.v" \
 "../../../../project_1.gen/sources_1/bd/design_1/hdl/design_1_wrapper.v" \
+"../../../../project_1.srcs/sim_1/imports/rtl/single_port_ram.v" \
 "../../../../project_1.srcs/sim_1/imports/rtl/tb_design_1_wrapper.v" \
 
 # compile glbl module
