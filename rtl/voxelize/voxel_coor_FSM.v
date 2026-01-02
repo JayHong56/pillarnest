@@ -37,20 +37,18 @@ module voxel_coor_FSM #(
     // 1) One-point buffer (capture one input beat)
     // ------------------------------------------------------------
     reg  [  127:0] point_raw;
-    reg  [   15:0] point_keep;
-    reg            point_last;
 
     // unpack (optional)
-    wire [   31:0] point_cloud_x = point_raw[31:0];
-    wire [   31:0] point_cloud_y = point_raw[63:32];
-    wire [   31:0] point_cloud_z = point_raw[95:64];
-    wire [   31:0] point_cloud_i = point_raw[127:96];
+    wire [   31:0] point_cloud_x = point_raw[127:96];
+    wire [   31:0] point_cloud_y = point_raw[95:64];
+    wire [   31:0] point_cloud_z = point_raw[63:32];
+    wire [   31:0] point_cloud_i = point_raw[31:0];
 
     // float to fixed point
-    wire [8+8-1:0] pt_x_int16;
-    wire [8+8-1:0] pt_y_int16;
-    wire [8+8-1:0] pt_z_int16;
-    wire [8+8-1:0] pt_intensity_int16;
+    wire [9+7-1:0] pt_x_int16;
+    wire [9+7-1:0] pt_y_int16;
+    wire [9+7-1:0] pt_z_int16;
+    wire [9+7-1:0] pt_intensity_int16;
     float_to_fixed float2fxp_x (
         .float_in(point_cloud_x),
         .true_fixed_value(pt_x_int16[15:0]),
@@ -78,8 +76,8 @@ module voxel_coor_FSM #(
     wire [11+5-1:0] fxp_mul_x_out;
     wire [11+5-1:0] fxp_add_x_out;
     fxp_mul #(
-        .WIIA (8),
-        .WIFA (8),
+        .WIIA (9),
+        .WIFA (7),
         .WIIB (5),
         .WIFB (11),
         .WOI  (11),
@@ -108,8 +106,8 @@ module voxel_coor_FSM #(
     wire [11+5-1:0] fxp_mul_y_out;
     wire [11+5-1:0] fxp_add_y_out;
     fxp_mul #(
-        .WIIA (8),
-        .WIFA (8),
+        .WIIA (9),
+        .WIFA (7),
         .WIIB (5),
         .WIFB (11),
         .WOI  (11),
@@ -147,8 +145,7 @@ module voxel_coor_FSM #(
     assign ABS_pt_y_int16 = (pt_y_int16[15]) ? (~pt_y_int16 + 1'b1) : pt_y_int16;
     assign ABS_pt_z_int16 = (pt_z_int16[15]) ? (~pt_z_int16 + 1'b1) : pt_z_int16;
 
-    // 这里给一个“边界判断结果”的占位
-    // keep_point=1 -> 写 BRAM; keep_point=0 -> 丢弃
+
     reg keep_point;
     // 边界控制
     always @(*) begin
@@ -171,8 +168,7 @@ module voxel_coor_FSM #(
     // 体素存BRAM的索引哈希表
     reg hash_req_valid;
     reg hash_req_op;  // 0: read, 1: write
-    // outputs
-    localparam VOXEL_WIDTH = 10;
+    localparam VOXEL_WIDTH = 11;
     localparam HASH_TABLE_SIZE = 128;
     localparam HASH_ADDR_WIDTH = 7;  // log2(HASH_TABLE_SIZE)=7
     wire hash_found;
@@ -184,12 +180,13 @@ module voxel_coor_FSM #(
         .TABLE_SIZE (HASH_TABLE_SIZE),
         .ADDR_WIDTH (HASH_ADDR_WIDTH)
     ) u_hash_table_tombstone (
-        .clk      (clk),
-        .rst_n    (rst_n),
-        .req_valid(hash_req_valid),
-        .req_op   (hash_req_op),
-        .key_x    (voxel_x),
-        .key_y    (voxel_y),
+        .clk       (clk),
+        .rst_n     (rst_n),
+        .keep_point(keep_point),
+        .req_valid (hash_req_valid),
+        .req_op    (hash_req_op),
+        .key_x     (voxel_x),
+        .key_y     (voxel_y),
 
         .busy      (hash_busy),
         .found     (hash_found),
@@ -198,16 +195,8 @@ module voxel_coor_FSM #(
     );
 
 
-    // ------------------------------------------------------------
-    // 2) Your preprocessing blocks (placeholders)
-    //    你已有 float_to_fixed / fxp_mul / fxp_add 等模块实例，可放这里
-    // ------------------------------------------------------------
-
-    // 这里给一个“处理后点”的占位（你可换成实际输出）
+    // 寄存点处理结果
     reg [127:0] point_proc;
-
-    // 例如你想用 abs(x), abs(y) vs threshold，这里只是占位，别当真：
-    // keep_point <= (abs_x <= THRESHOLD_CLOSE) && (abs_y <= THRESHOLD_CLOSE);
 
     // ------------------------------------------------------------
     // 3) AXI-Lite write sequencing (4x 32-bit writes for 128-bit point)
@@ -215,7 +204,6 @@ module voxel_coor_FSM #(
     reg aw_done, w_done;  // handshake trackers
 
     wire [127:0] cur_wdata = point_proc;
-
     wire [AXI_LITE_ADDR_WIDTH-1:0] cur_awaddr = {
         5'd20 * hash_out_idx, 2'd0
     };  // 20 bytes per entry, 4 words
@@ -226,7 +214,7 @@ module voxel_coor_FSM #(
     localparam ST_IN = 3'd0;
     localparam ST_PREP = 3'd1;
     localparam ST_DROP = 3'd2;
-    localparam ST_AW = 3'd3;
+    localparam ST_W = 3'd3;
     localparam ST_B = 3'd4;
 
     reg [2:0] state;
@@ -244,9 +232,6 @@ module voxel_coor_FSM #(
             S_AXIS_DRAM_TREADY <= 1'b1;
 
             point_raw <= 128'd0;
-            point_keep <= 16'd0;
-            point_last <= 1'b0;
-
             point_proc <= 128'd0;
             keep_point <= 1'b0;
 
@@ -287,8 +272,6 @@ module voxel_coor_FSM #(
                     if (s_fire) begin
                         // capture one point
                         point_raw <= S_AXIS_DRAM_TDATA;
-                        point_keep <= S_AXIS_DRAM_TKEEP;
-                        point_last <= S_AXIS_DRAM_TLAST;
 
                         // stop upstream until we finish this point
                         S_AXIS_DRAM_TREADY <= 1'b0;
@@ -322,10 +305,10 @@ module voxel_coor_FSM #(
                         // decide drop or write
                         if (keep_point) begin
                             if (hash_found) begin
-                                state <= ST_PREP;
-                            end else begin
-                                state <= ST_AW;
+                                state <= ST_W;
                                 hash_req_valid <= 1'b0;
+                            end else begin
+                                state <= ST_PREP;
                             end
                         end else state <= ST_DROP;
                     end else begin
@@ -342,10 +325,10 @@ module voxel_coor_FSM #(
                 end
 
                 // ------------------------------------------------------------
-                // ST_AW_W: issue AW and W for current 32-bit word (AXI-Lite single write)
+                // ST_W_W: issue AW and W for current 32-bit word (AXI-Lite single write)
                 // We keep AWVALID/WVALID asserted until handshake happens.
                 // ------------------------------------------------------------
-                ST_AW: begin
+                ST_W: begin
                     // Drive current write signals
                     m_axi_awaddr <= cur_awaddr;
                     m_axi_wdata  <= cur_wdata;

@@ -66,12 +66,11 @@ always @ (posedge clk) begin
 	end
 	else begin
 		if (en) begin
-			read_address_reg <= read_address;
-
+			data_out <= mem[read_address];
 			if (we) begin
 				mem[write_address] <= data_in;
+				data_out <= data_in;
 			end
-			data_out <= mem[read_address_reg];
 		end
 	end
 end

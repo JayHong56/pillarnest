@@ -1,13 +1,14 @@
 module hash_table_tombstone #(
-    parameter COORD_WIDTH = 16,
+    parameter COORD_WIDTH = 11,
     parameter TABLE_SIZE  = 128,
     parameter ADDR_WIDTH  = 7
 ) (
     input wire clk,
     input wire rst_n,
 
+    input wire                   keep_point,
     input wire                   req_valid,
-    input wire                   req_op,     // 0: Read & Clear, 1: Write/Insert
+    input wire                   req_op,      // 0: Read & Clear, 1: Write/Insert
     input wire [COORD_WIDTH-1:0] key_x,
     input wire [COORD_WIDTH-1:0] key_y,
 
@@ -64,13 +65,16 @@ module hash_table_tombstone #(
     localparam S_CHECK = 2;
     localparam S_PRE_WRITE = 3;  // 准备写入（可能需要切换地址）
     localparam S_WRITE = 4;
-
+    reg temp;
+    reg temp_crush;
     reg [2:0] state;
 
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             state      <= S_IDLE;
             busy       <= 0;
+            temp       <= 0;
+            temp_crush <= 0;
             found      <= 0;
             out_idx    <= 0;
             table_full <= 0;
@@ -81,8 +85,10 @@ module hash_table_tombstone #(
                 S_IDLE: begin
                     found      <= 0;
                     table_full <= 0;
-                    if (req_valid) begin
+                    if (req_valid && keep_point && !found) begin
                         busy                 <= 1;
+                        temp                 <= 0;
+                        temp_crush           <= 0;
                         r_in_x               <= key_x;
                         r_in_y               <= key_y;
                         r_in_op              <= req_op;
@@ -93,8 +99,7 @@ module hash_table_tombstone #(
                         // 清除墓碑记录
                         seen_tombstone       <= 0;
                         first_tombstone_addr <= 0;
-
-                        state                <= S_READ;
+                        state <= S_READ;
                     end else begin
                         busy <= 0;
                     end
@@ -106,7 +111,7 @@ module hash_table_tombstone #(
                 end
 
                 S_CHECK: begin
-                    case (r_status) 
+                    case (r_status)
                         // ----------------------------------------------------
                         // 情况 A: 这是一个空位 (End of Chain)
                         // ----------------------------------------------------
@@ -133,8 +138,9 @@ module hash_table_tombstone #(
                         // ----------------------------------------------------
                         ST_OCCU: begin
                             if (r_key_x == r_in_x && r_key_y == r_in_y) begin
+                                temp = 1'b1;
                                 // --- HIT: 找到了 ---
-                                out_idx <= curr_addr; 
+                                out_idx <= curr_addr;
                                 found   <= 1;
                                 busy    <= 0;
                                 state   <= S_IDLE;
@@ -144,6 +150,7 @@ module hash_table_tombstone #(
                                     mem[curr_addr][ENTRY_WIDTH-1:ENTRY_WIDTH-2] <= ST_TOMB;
                                 end
                             end else begin
+                                temp_crush  <= 1'b1;
                                 // --- MISS: 冲突，继续探测 ---
                                 probe_count <= probe_count + 1;
                                 curr_addr   <= curr_addr + 1;

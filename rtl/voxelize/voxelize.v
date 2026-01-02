@@ -54,7 +54,7 @@ module voxelize #(
         .AXIS_STROBE_WIDTH(AXIS_DATA_WIDTH / 8),
         .USE_KEEP(0),
         .USER_DEPTH(1)
-    ) fifo_coor_bram (
+    ) dram_fifo (
         .clk  (clk),
         .rst_n(rst_n),
 
