@@ -50,7 +50,7 @@ output reg  [(DATA_WIDTH - 1):0]  data_out
 
 
 //synthesis attribute ram_style of mem is block
-(* ram_style = "block"*) reg [(DATA_WIDTH - 1):0] mem [0:((1 << ADDR_WIDTH) - 1)]; //pragma attribute mem ram_block TRUE
+reg [(DATA_WIDTH - 1):0] mem [0:((1 << ADDR_WIDTH) - 1)]; //pragma attribute mem ram_block TRUE
 reg [(ADDR_WIDTH - 1):0] read_address_reg;
 
 initial begin

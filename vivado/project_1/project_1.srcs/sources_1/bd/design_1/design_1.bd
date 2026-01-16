@@ -851,12 +851,6 @@
           "axi_datamover_0/S_AXIS_S2MM_CMD"
         ]
       },
-      "axi_bram_ctrl_0_BRAM_PORTA": {
-        "interface_ports": [
-          "blk_mem_gen_0/BRAM_PORTA",
-          "axi_bram_ctrl_0/BRAM_PORTA"
-        ]
-      },
       "axi_datamover_0_M_AXIS_MM2S": {
         "interface_ports": [
           "M_AXIS_MM2S",

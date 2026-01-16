@@ -1,37 +1,27 @@
 `timescale 1ps / 1ps
 
-
 module voxelize #(
-    // parameter integer DATA_WIDTH = 128,
-    // parameter integer ADDR_WIDTH = 12,
     parameter integer DRAM_DATA_WIDTH = 128,
     parameter integer DRAM_ADDR_WIDTH = 16,
-
+    parameter integer BRAM_DATA_WIDTH = 256,  // 64bit * 4points
+    parameter integer BRAM_ADDR_WIDTH = 10,   // 128pillar * 5brams
     parameter integer AXIS_DATA_WIDTH = 128,
-    parameter integer AXIS_ADDR_WIDTH = 16,
-
-    parameter integer AXI_LITE_DATA_WIDTH = 128,
-    parameter integer AXI_LITE_ADDR_WIDTH = 32,
-
-    parameter integer BRAM_DATA_WIDTH = 128,
-    parameter integer BRAM_ADDR_WIDTH = 19
+    parameter integer AXIS_ADDR_WIDTH = 16
 ) (
     input wire clk,
     input wire rst_n
-
 );
-
     reg                            dram_read_en = 1'b1;
     reg                            dram_write_en = 1'b0;
     wire [  DRAM_ADDR_WIDTH - 1:0] dram_write_size = (1 << DRAM_ADDR_WIDTH) - 1;
-    wire [(DRAM_DATA_WIDTH - 1):0] dram_read_address;
+    wire [(DRAM_ADDR_WIDTH - 1):0] dram_read_address;
     wire [(DRAM_DATA_WIDTH - 1):0] dram_data_out;
     dram #(
         .DATA_WIDTH(DRAM_DATA_WIDTH),
         .ADDR_WIDTH(DRAM_ADDR_WIDTH),  // 65536 depth
-        .MEM_FILE("E:\\verilog\\pillarnest\\rtl\\pointcloud\\points_bits_128.txt"),
+        .MEM_FILE("E:\\verilog\\pillarnest\\rtl\\.pointcloud\\points_bits_128.txt"),
         .MEM_FILE_LENGTH(34752)
-    ) voxel_dram (
+    ) pointcloud_dram (
         .clk(clk),
         .rst_n(rst_n),
         .en(dram_read_en),
@@ -44,17 +34,17 @@ module voxelize #(
 
 
     wire S_AXIS_DRAM_TLAST;
-    wire [127:0] S_AXIS_DRAM_TDATA;
+    wire [AXIS_DATA_WIDTH-1:0] S_AXIS_DRAM_TDATA;
     wire S_AXIS_DRAM_TVALID;
     wire S_AXIS_DRAM_TREADY;
     // axi stream 读fifo
-    adapter_bram_2_axi_stream #(
+    fifo_ram_2_axi_stream #(
         .AXIS_DATA_WIDTH(AXIS_DATA_WIDTH),
         .BRAM_DEPTH(AXIS_ADDR_WIDTH),
         .AXIS_STROBE_WIDTH(AXIS_DATA_WIDTH / 8),
         .USE_KEEP(0),
         .USER_DEPTH(1)
-    ) dram_fifo (
+    ) fifo_DRAM_2_axi_stream (
         .clk  (clk),
         .rst_n(rst_n),
 
@@ -73,27 +63,28 @@ module voxelize #(
     );
 
 
-    // AXI4-Lite master write channel (to BRAM-mapped slave)
-    wire [  AXI_LITE_ADDR_WIDTH-1:0] m_axi_awaddr;
-    wire                             m_axi_awvalid;
-    wire                             m_axi_awready;
-    wire [  AXI_LITE_DATA_WIDTH-1:0] m_axi_wdata;
-    wire [AXI_LITE_DATA_WIDTH/8-1:0] m_axi_wstrb;
-    wire                             m_axi_wvalid;
-    wire                             m_axi_wready;
-    wire [                      1:0] m_axi_bresp;
-    wire                             m_axi_bvalid;
-    wire                             m_axi_bready;
+
+    wire                         bram_clk_a;
+    wire                         bram_rst_a;
+    wire                         bram_wr_a;
+    wire [BRAM_DATA_WIDTH/8-1:0] bram_bwen_a;  // 32-bit Byte Enable
+    wire [  BRAM_ADDR_WIDTH-1:0] bram_addr_a;  // 10-bit Address
+    wire [  BRAM_DATA_WIDTH-1:0] bram_wrdata_a;  // 256-bit Data
+    wire                         m_axis_expire_tvalid;
+    wire                         m_axis_expire_tready;
+    wire [           22+7+5-1:0] m_axis_expire_tdata;  // NOTE
 
 
     localparam [15:0] THRESHOLD_CLOSE = 16'h0100;  // 1.00m
-    localparam [15:0] THRESHOLD_BOUDARY = 16'h3800;  // 56.00m
+    localparam [15:0] THRESHOLD_BOUDARY = 16'h3600;  // 54.00m
     localparam [15:0] THRESHOLD_BOUDARY_Z_LOW = 16'h0500;  // -5m
     localparam [15:0] THRESHOLD_BOUDARY_Z_HIGH = 16'h0300;  // +3m
     localparam integer PRE_LAT = 1;  // 预处理固定延迟（拍数占位）
-    voxel_coor_FSM #(
-        .AXI_LITE_DATA_WIDTH(AXI_LITE_DATA_WIDTH),
-        .AXI_LITE_ADDR_WIDTH(AXI_LITE_ADDR_WIDTH),
+    voxel_coor #(
+        .AXIS_DATA_WIDTH(AXIS_DATA_WIDTH),
+        .AXIS_ADDR_WIDTH(AXIS_ADDR_WIDTH),
+        .BRAM_DATA_WIDTH(BRAM_DATA_WIDTH),
+        .BRAM_ADDR_WIDTH(BRAM_ADDR_WIDTH),
         .THRESHOLD_CLOSE(THRESHOLD_CLOSE),
         .THRESHOLD_BOUDARY(THRESHOLD_BOUDARY),
         .THRESHOLD_BOUDARY_Z_LOW(THRESHOLD_BOUDARY_Z_LOW),
@@ -109,70 +100,75 @@ module voxelize #(
         .S_AXIS_DRAM_TVALID(S_AXIS_DRAM_TVALID),
         .S_AXIS_DRAM_TREADY(S_AXIS_DRAM_TREADY),
 
-        // Master axi-lite side (output)
-        .m_axi_awaddr (m_axi_awaddr),
-        .m_axi_awvalid(m_axi_awvalid),
-        .m_axi_awready(m_axi_awready),
-        .m_axi_wdata  (m_axi_wdata),
-        .m_axi_wstrb  (m_axi_wstrb),
-        .m_axi_wvalid (m_axi_wvalid),
-        .m_axi_wready (m_axi_wready),
-        .m_axi_bresp  (m_axi_bresp),
-        .m_axi_bvalid (m_axi_bvalid),
-        .m_axi_bready (m_axi_bready)
+        .bram_clk(bram_clk_a),
+        .bram_rst(),
+        .bram_wr(bram_wr_a),
+        .bram_bwen(bram_bwen_a),
+        .bram_addr(bram_addr_a),
+        .bram_wrdata(bram_wrdata_a),
+        .m_axis_expire_tdata(m_axis_expire_tdata),
+        .m_axis_expire_tvalid(m_axis_expire_tvalid),
+        .m_axis_expire_tready(m_axis_expire_tready)
     );
 
-    wire [  BRAM_ADDR_WIDTH-1:0] bram_write_address;
-    wire [  BRAM_DATA_WIDTH-1:0] bram_write_data;
-    wire [BRAM_DATA_WIDTH/8-1:0] bram_porta_we;
-    wire  [BRAM_DATA_WIDTH - 1:0] bram_porta_out;
-    axi_lite_bram_writer #(
-        .AXI_DATA_WIDTH (AXI_LITE_DATA_WIDTH),
-        .AXI_ADDR_WIDTH (AXI_LITE_ADDR_WIDTH),
+    localparam COORD_WIDTH = 11;
+    localparam PT_WIDTH = 16;
+    localparam HASH_ADDR_WIDTH = 7;
+    localparam VN_WIDTH = 5;
+    localparam ENPAND_PT_DIM = 11;  // x,y,z,intensity,0,(x-mean,y-mean,z-mean,intensity-mean),(x-vmean,y-vmean,z-vmean,intensity-vmean)
+    localparam MAX_VOXEL_NUM = 12'd20;
+    wire bram_clk_b;
+    wire bram_rst_b;
+    wire [BRAM_ADDR_WIDTH-1:0] bram_addr_b;
+    wire bram_en_b;
+    wire [BRAM_DATA_WIDTH-1:0] bram_rdata_b;
+
+    pfn #(
+        .COORD_WIDTH    (COORD_WIDTH),
+        .PT_WIDTH       (PT_WIDTH),
+        .HASH_ADDR_WIDTH(HASH_ADDR_WIDTH),
+        .MAX_VOXEL_NUM  (MAX_VOXEL_NUM),
+        .VN_WIDTH       (VN_WIDTH),
+        .ENPAND_PT_DIM  (ENPAND_PT_DIM),
         .BRAM_DATA_WIDTH(BRAM_DATA_WIDTH),
         .BRAM_ADDR_WIDTH(BRAM_ADDR_WIDTH)
-    ) axi_lite_bram_writer_inst (
-        .aclk(clk),
-        .aresetn(rst_n),
-        .s_axi_awaddr(m_axi_awaddr),
-        .s_axi_awvalid(m_axi_awvalid),
-        .s_axi_awready(m_axi_awready),
-        .s_axi_wdata(m_axi_wdata),
-        .s_axi_wstrb(m_axi_wstrb),
-        .s_axi_wvalid(m_axi_wvalid),
-        .s_axi_wready(m_axi_wready),
-        .s_axi_bresp(m_axi_bresp),
-        .s_axi_bvalid(m_axi_bvalid),
-        .s_axi_bready(m_axi_bready),
-        .bram_porta_clk(),
-        .bram_porta_rst(),
-        .bram_porta_addr(bram_write_address),
-        .bram_porta_wrdata(bram_write_data),
-        .bram_porta_we(bram_porta_we)
+    ) u_pfn (
+        .clk                 (clk),
+        .rst_n               (rst_n),
+        .s_axis_expire_tvalid(m_axis_expire_tvalid),
+        .s_axis_expire_tready(m_axis_expire_tready),
+        .s_axis_expire_tdata (m_axis_expire_tdata),
+        .bram_clk            (bram_clk_b),
+        .bram_rst            (bram_rst_b),
+        .bram_addr           (bram_addr_b),
+        .bram_en             (bram_en_b),
+        .bram_rdata          (bram_rdata_b)
     );
 
-    reg bram_en = 1'b1;
-    dual_port_bram #(
+
+
+    dualport_bram #(
         .DATA_WIDTH     (BRAM_DATA_WIDTH),
         .ADDR_WIDTH     (BRAM_ADDR_WIDTH),
         .MEM_FILE       ("NOTHING"),
         .MEM_FILE_LENGTH()
-
-    ) voxel_bram (
-        .a_clk (clk),
-        .a_wr  (bram_en),
-        .a_addr(bram_write_address),
-        .a_din (bram_write_data),
+    ) voxelpoint_bram (
+        .a_clk (bram_clk_a),
+        .a_wr  (bram_wr_a),
+        .a_en  (1'b1),
+        .a_bwen(bram_bwen_a),
+        .a_addr(bram_addr_a),
+        .a_din (bram_wrdata_a),
         .a_dout(bram_porta_out),
 
-        .b_clk (),
-        .b_wr  (),
-        .b_addr(),
-        .b_din (),
-        .b_dout()
+        .b_clk (bram_clk_b),
+        .b_wr  (1'b0), // only read
+        .b_en  (bram_en_b),
+        .b_bwen(1'b0), // only read
+        .b_addr(bram_addr_b),
+        .b_din (bram_addr_b),
+        .b_dout(bram_rdata_b)
     );
-
-
 
 
 endmodule

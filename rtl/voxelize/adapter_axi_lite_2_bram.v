@@ -1,7 +1,7 @@
 
 `timescale 1 ns / 1 ps
 
-module axi_lite_bram_writer #(
+module adapter_axi_lite_2_bram #(
     parameter integer AXI_DATA_WIDTH  = 32,
     parameter integer AXI_ADDR_WIDTH  = 32,
     parameter integer BRAM_DATA_WIDTH = 32,

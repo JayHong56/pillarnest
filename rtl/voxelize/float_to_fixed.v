@@ -7,7 +7,7 @@ module float_to_fixed (
 );
 
 parameter FIXED_WIDTH = 16; // must not be > 32
-parameter FIXED_FRACTIONAL = 7;
+parameter FIXED_FRACTIONAL = 8;
 
 input [31:0] float_in;
 output fixed_sign;

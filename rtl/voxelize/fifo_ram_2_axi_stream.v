@@ -32,7 +32,7 @@ SOFTWARE.
 
 `timescale 1ps / 1ps
 
-module adapter_bram_2_axi_stream #(
+module fifo_ram_2_axi_stream #(
     parameter AXIS_DATA_WIDTH   = 128,
     parameter BRAM_DEPTH        = 12,
     parameter AXIS_STROBE_WIDTH = AXIS_DATA_WIDTH / 8,
@@ -64,6 +64,8 @@ module adapter_bram_2_axi_stream #(
             for (clogb2 = 0; bit_depth > 0; clogb2 = clogb2 + 1) bit_depth = bit_depth >> 1;
         end
     endfunction
+
+
 
 
 
