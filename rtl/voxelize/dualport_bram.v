@@ -10,7 +10,6 @@ module dualport_bram #(
     parameter ADDR_WIDTH = 10,
     parameter MEM_FILE = "NOTHING",
     parameter MEM_FILE_LENGTH = 0,
-    // 自动计算字节数量 (例如 256位 / 8 = 32字节)
     parameter NUM_BYTES = DATA_WIDTH / 8
 ) (
     // Port A
@@ -43,6 +42,13 @@ module dualport_bram #(
             end
         end
     endgenerate
+
+    integer idx;
+    initial begin
+        for (idx = 0; idx < (1 << ADDR_WIDTH); idx = idx + 1) begin
+            mem[idx] = {DATA_WIDTH{1'b0}};
+        end
+    end
 
     // 循环变量
     integer i;

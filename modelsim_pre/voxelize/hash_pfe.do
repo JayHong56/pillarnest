@@ -27,13 +27,13 @@ add wave -noupdate /tb_voxelize/dut/voxel_coordinate_inst/u_hash_table_tombstone
 add wave -noupdate -color Gold -radix unsigned /tb_voxelize/dut/voxel_coordinate_inst/u_hash_table_tombstone/state
 add wave -noupdate -radix unsigned /tb_voxelize/dut/voxel_coordinate_inst/u_hash_table_tombstone/out_idx
 add wave -noupdate -color Coral -radix unsigned /tb_voxelize/dut/voxel_coordinate_inst/u_hash_table_tombstone/probe_count
+add wave -noupdate -color Gold /tb_voxelize/dut/voxel_coordinate_inst/u_hash_table_tombstone/temp_axis_expire_tready
 add wave -noupdate -radix unsigned /tb_voxelize/dut/voxel_coordinate_inst/u_hash_table_tombstone/point_number
 add wave -noupdate -radix unsigned /tb_voxelize/dut/voxel_coordinate_inst/u_hash_table_tombstone/key_x
 add wave -noupdate -radix unsigned /tb_voxelize/dut/voxel_coordinate_inst/u_hash_table_tombstone/key_y
 add wave -noupdate /tb_voxelize/dut/voxel_coordinate_inst/u_hash_table_tombstone/r_data_raw
 add wave -noupdate /tb_voxelize/dut/voxel_coordinate_inst/u_hash_table_tombstone/r_status
 add wave -noupdate /tb_voxelize/dut/voxel_coordinate_inst/u_hash_table_tombstone/seen_tombstone
-add wave -noupdate {/tb_voxelize/dut/voxel_coordinate_inst/u_hash_table_tombstone/mem[15]}
 add wave -noupdate /tb_voxelize/dut/voxel_coordinate_inst/u_hash_table_tombstone/busy
 add wave -noupdate /tb_voxelize/dut/voxel_coordinate_inst/u_hash_table_tombstone/mem
 add wave -noupdate -radix unsigned /tb_voxelize/dut/voxel_coordinate_inst/u_hash_table_tombstone/r_key_x
@@ -80,7 +80,7 @@ add wave -noupdate /tb_voxelize/dut/u_pfn/voxel_x_fix16
 add wave -noupdate /tb_voxelize/dut/u_pfn/voxel_y_fix16
 add wave -noupdate /tb_voxelize/dut/u_pfn/voxel_z_fix16
 TreeUpdate [SetDefaultTree]
-WaveRestoreCursors {{Cursor 1} {1300294 ps} 1} {{Cursor 2} {4609201 ps} 1} {{Cursor 3} {2701719 ps} 1} {{Cursor 4} {857855 ps} 1} {{Cursor 5} {6224248 ps} 1 Magenta default} {{Cursor 6} {33370366 ps} 0}
+WaveRestoreCursors {{Cursor 1} {1300294 ps} 1} {{Cursor 2} {4609201 ps} 1} {{Cursor 3} {2701719 ps} 1} {{Cursor 4} {857855 ps} 1} {{Cursor 5} {6224248 ps} 1 Magenta default} {{Cursor 6} {1934260378 ps} 0}
 quietly wave cursor active 6
 configure wave -namecolwidth 178
 configure wave -valuecolwidth 100
@@ -96,5 +96,5 @@ configure wave -griddelta 40
 configure wave -timeline 0
 configure wave -timelineunits us
 update
-WaveRestoreZoom {32745323 ps} {34430464 ps}
+WaveRestoreZoom {1933437142 ps} {1936012859 ps}
 bookmark add wave bookmark0 {{106113 ps} {197926 ps}} 0

@@ -5,13 +5,15 @@ module voxel_coor #(
     parameter integer BRAM_DATA_WIDTH = 256,  // 4 * 64
     parameter integer BRAM_ADDR_WIDTH = 10,   // 128pillar * 5brams
 
-    parameter integer AXIS_DATA_WIDTH = 128,
-    parameter integer AXIS_ADDR_WIDTH = 16,
-    parameter [15:0] THRESHOLD_CLOSE = 16'h0100,  // 1.00m
-    parameter [15:0] THRESHOLD_BOUDARY = 16'h3600,  // 54.00m
-    parameter [15:0] THRESHOLD_BOUDARY_Z_LOW = 16'h0500,  // -5m
-    parameter [15:0] THRESHOLD_BOUDARY_Z_HIGH = 16'h0300,  // +3m
-    parameter integer PRE_LAT = 1  // 预处理固定延迟（拍数占位）
+    parameter integer        AXIS_DATA_WIDTH          = 128,
+    parameter integer        AXIS_ADDR_WIDTH          = 16,
+    parameter integer        HASH_TABLE_SIZE          = 256,
+    parameter integer        HASH_ADDR_WIDTH          = 8,         // log2(HASH_TABLE_SIZE)
+    parameter         [15:0] THRESHOLD_CLOSE          = 16'h0100,  // 1.00m
+    parameter         [15:0] THRESHOLD_BOUDARY        = 16'h3600,  // 54.00m
+    parameter         [15:0] THRESHOLD_BOUDARY_Z_LOW  = 16'h0500,  // -5m
+    parameter         [15:0] THRESHOLD_BOUDARY_Z_HIGH = 16'h0300,  // +3m
+    parameter integer        PRE_LAT                  = 2          // 预处理固定延迟（拍数占位）
 ) (
     input wire clk,
     input wire rst_n,
@@ -62,24 +64,24 @@ module voxel_coor #(
     wire signed [PT_WIDTH_I+PT_WIDTH_F-1:0] pt_z_fix16;
     wire signed [PT_WIDTH_I+PT_WIDTH_F-1:0] pt_intensity_fix16;
     float_to_fixed float2fxp_x (
-        .float_in(pt_x_float32),
+        .float_in        (pt_x_float32),
         .true_fixed_value(pt_x_fix16),
-        .fixed_sign()
+        .fixed_sign      ()
     );
     float_to_fixed float2fxp_y (
-        .float_in(pt_y_float32),
+        .float_in        (pt_y_float32),
         .true_fixed_value(pt_y_fix16),
-        .fixed_sign()
+        .fixed_sign      ()
     );
     float_to_fixed float2fxp_z (
-        .float_in(pt_z_float32),
+        .float_in        (pt_z_float32),
         .true_fixed_value(pt_z_fix16),
-        .fixed_sign()
+        .fixed_sign      ()
     );
     float_to_fixed float2fxp_intensity (
-        .float_in(pt_intensity_float32),
+        .float_in        (pt_intensity_float32),
         .true_fixed_value(pt_intensity_fix16),
-        .fixed_sign()
+        .fixed_sign      ()
     );
 
     // 转为体素坐标
@@ -97,9 +99,9 @@ module voxel_coor #(
         .WOF  (PT_WIDTH_F),
         .ROUND(1)
     ) fxp_add_voxel_x (
-        .ina(pt_x_fix16),
-        .inb(bourdary_fix16),
-        .out(fxp_add_x_out),
+        .ina     (pt_x_fix16),
+        .inb     (bourdary_fix16),
+        .out     (fxp_add_x_out),
         .overflow()
     );
     fxp_mul #(
@@ -111,9 +113,9 @@ module voxel_coor #(
         .WOF  (0),
         .ROUND(1)
     ) fxp_mul_voxel_x (
-        .ina(fxp_add_x_out),
-        .inb(MULT_FACTOR),
-        .out(fxp_mul_x_out),
+        .ina     (fxp_add_x_out),
+        .inb     (MULT_FACTOR),
+        .out     (fxp_mul_x_out),
         .overflow()
     );
     wire [PT_WIDTH_I+PT_WIDTH_F-1:0] fxp_add_y_out;
@@ -127,9 +129,9 @@ module voxel_coor #(
         .WOF  (PT_WIDTH_F),
         .ROUND(1)
     ) fxp_add_voxel_y (
-        .ina(pt_y_fix16),
-        .inb(bourdary_fix16),
-        .out(fxp_add_y_out),
+        .ina     (pt_y_fix16),
+        .inb     (bourdary_fix16),
+        .out     (fxp_add_y_out),
         .overflow()
     );
     fxp_mul #(
@@ -141,9 +143,9 @@ module voxel_coor #(
         .WOF  (0),
         .ROUND(1)
     ) fxp_mul_voxel_y (
-        .ina(fxp_add_y_out),
-        .inb(MULT_FACTOR),
-        .out(fxp_mul_y_out),
+        .ina     (fxp_add_y_out),
+        .inb     (MULT_FACTOR),
+        .out     (fxp_mul_y_out),
         .overflow()
     );
 
@@ -166,9 +168,9 @@ module voxel_coor #(
             keep_point <= 1'b0;
             // end else if (point_raw == 128'd0) begin // invaild data 
             //     keep_point <= 1'b0;
-        end else if ((ABS_pt_x_fix16 <= THRESHOLD_CLOSE) && (ABS_pt_y_fix16 <= THRESHOLD_CLOSE)) begin // too close
+        end else if ((ABS_pt_x_fix16 <= THRESHOLD_CLOSE) && (ABS_pt_y_fix16 <= THRESHOLD_CLOSE)) begin  // too close
             keep_point <= 1'b0;
-        end else if (ABS_pt_x_fix16 > THRESHOLD_BOUDARY || ABS_pt_y_fix16 > THRESHOLD_BOUDARY) begin // over boundary
+        end else if (ABS_pt_x_fix16 > THRESHOLD_BOUDARY || ABS_pt_y_fix16 > THRESHOLD_BOUDARY) begin  // over boundary
             keep_point <= 1'b0;
         end else if (ABS_pt_z_fix16[15] ? (ABS_pt_z_fix16 > THRESHOLD_BOUDARY_Z_LOW) : 
                                             (ABS_pt_z_fix16 > THRESHOLD_BOUDARY_Z_HIGH)) begin // over z boundary
@@ -181,12 +183,8 @@ module voxel_coor #(
 
     // 体素存BRAM的索引哈希表
     reg hash_req_valid;
-    reg hash_req_op;  // 0: read, 1: write
-    localparam HASH_TABLE_SIZE = 128;
-    localparam HASH_ADDR_WIDTH = 7;  // log2(HASH_TABLE_SIZE)=7
     localparam [23:0] MAX_VOXEL_NUM = 24'd20;  // 32-LSB(3)-5 = 20
     localparam VN_WIDTH = 5;  // Max 20 points per voxel
-
     wire hash_found;
     wire hash_busy;
     wire hash_table_full;
@@ -194,25 +192,25 @@ module voxel_coor #(
     wire [VN_WIDTH-1:0] hash_out_point_number;
 
 
-    hash_table #(
-        .COORD_WIDTH(VOXEL_WIDTH),
-        .TABLE_SIZE(HASH_TABLE_SIZE),
-        .ADDR_WIDTH(HASH_ADDR_WIDTH),
-        .MAX_VOXEL_NUM(MAX_VOXEL_NUM),
-        .VN_WIDTH(VN_WIDTH),
-        .LIFE_CYCLE(16'd100),  // 经过 50 次由于其他写操作导致的时间流逝后过期
-        .TIMER_WIDTH(AXIS_ADDR_WIDTH)  // 计时器足够大，防止频繁溢出回绕问题
+    hash_bucket_table #(
+        .COORD_WIDTH      (VOXEL_WIDTH),
+        .VN_WIDTH         (VN_WIDTH),
+        .LIFE_CYCLE       (16'd100),          // 经过 50 次由于其他写操作导致的时间流逝后过期
+        .TIMER_WIDTH      (16),
+        .ADDR_WIDTH       (HASH_ADDR_WIDTH),
+        .TABLE_SIZE       (HASH_TABLE_SIZE),
+        .BUCKETS          (64),
+        .BUCKET_SLOT_WIDTH(4)
     ) u_hash_table_tombstone (
         .clk      (clk),
         .rst_n    (rst_n),
         .req_valid(hash_req_valid),
-        .req_op   (hash_req_op),
         .key_x    (voxel_x),
         .key_y    (voxel_y),
 
         .busy                (hash_busy),
         .found               (hash_found),
-        .out_idx             (hash_out_idx),           // 0~127
+        .out_idx             (hash_out_idx),           // 0~255
         .out_point_number    (hash_out_point_number),  //1~20
         .table_full          (hash_table_full),
         .m_axis_expire_tready(m_axis_expire_tready),
@@ -233,7 +231,7 @@ module voxel_coor #(
     // Row Address = Linear_Index / 4 (右移2位)
     // wire [BRAM_ADDR_WIDTH-1:0] bram_row_addr = linear_index[11:2]; 
     localparam EXPEND_VOXEL_ROW = MAX_VOXEL_NUM >> 2;  // 20 / 4 = 5
-    wire [BRAM_ADDR_WIDTH-1:0] bram_row_addr = hash_out_idx * EXPEND_VOXEL_ROW;  // NOTE
+    wire [BRAM_ADDR_WIDTH-1:0] bram_row_addr = hash_out_idx * EXPEND_VOXEL_ROW + (hash_out_point_number >> 2);  // NOTE
     // Sub-slot Index = Linear_Index % 4 (取低2位)
     wire [1:0] bram_slot_idx = hash_out_point_number[1:0];  // NOTE
     // wire [1:0] bram_slot_idx = linear_index[1:0]; // 0-3
@@ -263,31 +261,26 @@ module voxel_coor #(
         if (!rst_n) begin
             S_AXIS_DRAM_TREADY <= 1'b1;
             state <= ST_IN;
-
+            hash_req_valid <= 1'b0;
             point_raw <= 128'd0;
             point_proc <= 64'd0;  // Fixed width to 64
-
             // Reset BRAM signals
             bram_wr <= 1'b0;
             bram_bwen <= {BRAM_DATA_WIDTH / 8{1'b0}};
             bram_addr <= {BRAM_ADDR_WIDTH{1'b0}};
-
             pre_cnt <= 'd0;
         end else begin
             case (state)
                 ST_IN: begin
                     S_AXIS_DRAM_TREADY <= 1'b1;
-
-                    // Clear Write Signals
                     bram_wr <= 1'b0;
                     bram_bwen <= 0;
 
                     pre_cnt <= 'd0;
-                    hash_req_op <= 1'b1;  // Write mode
                     hash_req_valid <= 1'b0;
 
                     if (s_fire) begin
-                        point_raw <= S_AXIS_DRAM_TDATA;
+                        point_raw <= S_AXIS_DRAM_TDATA;  // 锁存输入数据
                         S_AXIS_DRAM_TREADY <= 1'b0;
                         state <= ST_PREP;
                     end
@@ -295,20 +288,13 @@ module voxel_coor #(
 
                 ST_PREP: begin
                     if (pre_cnt < PRE_LAT) begin
-                        pre_cnt <= 'd0;
-                        // Data Packing
                         point_proc <= {pt_x_fix16, pt_y_fix16, pt_z_fix16, pt_intensity_fix16};
-
                         if (keep_point) begin
                             if (hash_found && !hash_busy) begin
-                                // --- BRAM Write Setup ---
-                                // 核心逻辑：立即准备写入，无需等待握手
                                 bram_wr <= 1'b1;
                                 bram_addr <= bram_row_addr;
-                                // 动态生成 Byte Enable: 只激活 32字节中的某8个字节
-                                // 8'hFF 对应 64-bit 的全 1 写使能
-                                bram_bwen <= bram_slot_idx == 2'd0 ? (32'hFF000000) : // 插入第四个点
-                                bram_slot_idx == 2'd1 ? (32'h000000FF) :
+                                bram_bwen <= bram_slot_idx == 2'd0 ? (32'hFF000000) : 
+                                            bram_slot_idx == 2'd1 ? (32'h000000FF) :
                                             bram_slot_idx == 2'd2 ? (32'h0000FF00) :
                                             bram_slot_idx == 2'd3 ? (32'h00FF0000) : bram_bwen;
                                 hash_req_valid <= 1'b0;
@@ -319,21 +305,19 @@ module voxel_coor #(
                                 state <= ST_PREP;
                             end
                         end else begin
-                            state <= ST_DROP;
+                            state   <= ST_DROP;
+                            pre_cnt <= 'd0;
                         end
                     end else begin
                         pre_cnt <= pre_cnt + 1'b1;
                     end
                 end
-
                 ST_DROP: begin
                     state <= ST_IN;
                     S_AXIS_DRAM_TREADY <= 1'b1;
                 end
 
                 ST_WRITE: begin
-                    bram_wr <= 1'b0;
-                    bram_bwen <= 0;
                     state <= ST_IN;
                     S_AXIS_DRAM_TREADY <= 1'b1;
                 end
@@ -342,7 +326,6 @@ module voxel_coor #(
                     state <= ST_IN;
                     S_AXIS_DRAM_TREADY <= 1'b1;
                 end
-
             endcase
         end
     end

@@ -5,7 +5,7 @@ module hash_table #(
     parameter MAX_VOXEL_NUM = 5'd20,
     parameter VN_WIDTH = 5,
 
-    parameter LIFE_CYCLE  = 16'd50,    // 经过 50 次由于其他写操作导致的时间流逝后过期
+    parameter LIFE_CYCLE = 16'd100,  // 经过 100 次由于其他写操作导致的时间流逝后过期
     parameter TIMER_WIDTH = 16  // 计时器足够大，防止频繁溢出回绕问题
 ) (
     input wire clk,
@@ -16,15 +16,15 @@ module hash_table #(
     input wire signed [COORD_WIDTH-1:0] key_x,
     input wire signed [COORD_WIDTH-1:0] key_y,
 
-    output reg busy,
-    output reg found,
-    output reg [ADDR_WIDTH-1:0] out_idx,  // 0 ~ 127
-    output reg [VN_WIDTH-1:0] out_point_number,  // 1~20
-    output reg table_full,
+    output reg                                          busy,
+    output reg                                          found,
+    output reg  [                       ADDR_WIDTH-1:0] out_idx,               // 0 ~ 127
+    output reg  [                         VN_WIDTH-1:0] out_point_number,      // 1~20
+    output reg                                          table_full,
     // axi-stream 
-    output reg m_axis_expire_tvalid,
-    input wire m_axis_expire_tready,
-    output reg [2*COORD_WIDTH+ADDR_WIDTH+VN_WIDTH-1:0] m_axis_expire_tdata  //22+7+5
+    output reg                                          m_axis_expire_tvalid,
+    input  wire                                         m_axis_expire_tready,
+    output reg  [2*COORD_WIDTH+ADDR_WIDTH+VN_WIDTH-1:0] m_axis_expire_tdata    //22+7+5
 );
     //----------------------------------------------------------------
     // 1. 状态定义 (2-bit Status)
@@ -60,7 +60,7 @@ module hash_table #(
     assign y_mixed = (key_y << 3) + key_y;
     // 混合后取低 7 位，同时把高位异或回来以防万一
     assign initial_hash = (x_mixed[6:0] ^ x_mixed[10:7] ^ y_mixed[6:0] ^ y_mixed[10:7]);
-    
+
     reg [ADDR_WIDTH-1:0] curr_addr;
     reg [  ADDR_WIDTH:0] probe_count;
 
@@ -116,7 +116,6 @@ module hash_table #(
                         r_in_x                  <= key_x;
                         r_in_y                  <= key_y;
                         r_in_op                 <= req_op;
-
                         curr_addr               <= initial_hash;
                         probe_count             <= 0;
 
@@ -179,9 +178,7 @@ module hash_table #(
                             // --- HIT: 找到了 ---
                             out_idx <= curr_addr;
                             out_point_number <= point_number + 1'b1;
-                            mem[curr_addr] <= {
-                                ST_OCCU, r_in_x, r_in_y, (point_number + 1'b1), global_timer
-                            };
+                            mem[curr_addr] <= {ST_OCCU, r_in_x, r_in_y, (point_number + 1'b1), global_timer};
                             found <= 1;
                             busy <= 0;
                             state <= S_IDLE;
@@ -229,9 +226,7 @@ module hash_table #(
                             // 我们可以 *直接征用* 这个位置写入新数据！无需再去找墓碑了。
                             // 这样效率极高，相当于原地替换。
 
-                            mem[curr_addr] <= {
-                                ST_OCCU, r_in_x, r_in_y, {(VN_WIDTH-1){1'b0}}, 1'b1, global_timer
-                            };
+                            mem[curr_addr] <= {ST_OCCU, r_in_x, r_in_y, {(VN_WIDTH - 1) {1'b0}}, 1'b1, global_timer};
                             out_idx <= curr_addr;
                             out_point_number <= 1'b1;
                             found <= 1;
@@ -245,8 +240,8 @@ module hash_table #(
                             mem[curr_addr][ENTRY_WIDTH-1:ENTRY_WIDTH-2] <= ST_TOMB;
 
                             // 记录墓碑（如果需要）
-                            if (!seen_tombstone) begin // 读取模式下其实不需要记录，但为了逻辑统一可保留
-                                seen_tombstone       <= 1; // 其实Read模式不写数据，这里不重要
+                            if (!seen_tombstone) begin  // 读取模式下其实不需要记录，但为了逻辑统一可保留
+                                seen_tombstone <= 1;  // 其实Read模式不写数据，这里不重要
                                 // first_tombstone_addr <= curr_addr; 
                             end
 
@@ -272,7 +267,7 @@ module hash_table #(
                 end
 
                 S_WRITE: begin
-                    mem[curr_addr] <= {ST_OCCU, r_in_x, r_in_y, {(VN_WIDTH-1){1'b0}}, 1'b1, global_timer};
+                    mem[curr_addr] <= {ST_OCCU, r_in_x, r_in_y, {(VN_WIDTH - 1) {1'b0}}, 1'b1, global_timer};
 
                     out_idx <= curr_addr;
                     out_point_number <= 1'b1;
