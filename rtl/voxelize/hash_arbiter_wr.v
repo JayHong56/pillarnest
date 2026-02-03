@@ -16,6 +16,7 @@ module hash_arbiter_wr #(
     output reg [HASH_SLOT_WIDTH-1:0] arb_we,
     output reg [     ADDR_WIDTH-1:0] arb_waddr,
     output reg [    ENTRY_WIDTH-1:0] arb_wdata,
+    output reg                       arb_write_en,
 
     output reg did_write_expired
 );
@@ -48,14 +49,16 @@ module hash_arbiter_wr #(
         arb_waddr  = 0;
         arb_wdata  = 0;
         fifo_rd_en = 1'b0;
+        arb_write_en <= 1'b0;
 
         did_write_expired <= 1'b0;
         if (main_write_we) begin
             arb_we    = main_write_addr[HASH_SLOT_WIDTH-1:0];
             arb_waddr = main_write_addr;
             arb_wdata = main_write_data;
+            arb_write_en <= 1'b1;
 
-            if (fifo_out_valid && (fifo_dout_addr == main_write_addr)) begin // 写冲突
+            if (fifo_out_valid && (fifo_dout_addr == main_write_addr)) begin  // 主pipeline要写的地址正好是过期地址
                 fifo_rd_en = 1'b1;
                 did_write_expired <= 1'b1;
             end
@@ -66,6 +69,7 @@ module hash_arbiter_wr #(
             arb_we    = fifo_dout_addr[HASH_SLOT_WIDTH-1:0];
             arb_waddr = fifo_dout_addr;
             arb_wdata = {ST_TOMB, {(ENTRY_WIDTH-2){1'b0}}};
+            arb_write_en <= 1'b1;
         end
     end
 

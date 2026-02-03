@@ -23,6 +23,7 @@ module hash_expire_manager #(
     output reg [      ENTRY_WIDTH-1:0] b_wdata,
     output reg [        BUCKET_AW-1:0] b_addr,
     output reg [BUCKET_SLOT_WIDTH-1:0] b_we,
+    output reg                         kill_valid,
 
     // ---- AXI-stream out (expired events) ----
     output wire                                         m_axis_expire_tvalid,
@@ -79,7 +80,6 @@ module hash_expire_manager #(
                 dq_mem[k] <= {ADDR_WIDTH{1'b0}};
             end
         end else begin
-            cand_valid <= 1'b0;
             if (write_commit) begin
                 dq_mem[dq_wr_ptr] <= write_addr;
                 dq_wr_ptr <= (dq_wr_ptr == DQ_DEPTH - 1) ? {($clog2(DQ_DEPTH)) {1'b0}} : (dq_wr_ptr + 1'b1);
@@ -89,31 +89,34 @@ module hash_expire_manager #(
                     cand_valid <= 1'b1;
                     dq_rd_ptr  <= (dq_rd_ptr == DQ_DEPTH - 1) ? {($clog2(DQ_DEPTH)) {1'b0}} : (dq_rd_ptr + 1'b1);
                 end else begin
-                    dq_count <= dq_count + 1'b1;  // 每次commit自加1
+                    dq_count   <= dq_count + 1'b1;  // 每次commit自加1
+                    cand_valid <= 1'b0;
                 end
             end
         end
     end
 
-    reg                           s0_valid;
-    reg         [ ADDR_WIDTH-1:0] s0_addr;
-    reg         [TIMER_WIDTH-1:0] s0_time;
-    reg                           s1_valid;
-    reg         [ ADDR_WIDTH-1:0] s1_addr;
-    reg         [TIMER_WIDTH-1:0] s1_time;
+    reg                                 s0_valid;
+    reg         [       ADDR_WIDTH-1:0] s0_addr;
+    reg         [      TIMER_WIDTH-1:0] s0_time;
+    reg                                 s1_valid;
+    reg         [       ADDR_WIDTH-1:0] s1_addr;
+    reg         [      TIMER_WIDTH-1:0] s1_time;
+    reg         [BUCKET_SLOT_WIDTH-1:0] s0_we;
 
-    wire        [            1:0] r_status;
-    wire signed [COORD_WIDTH-1:0] r_key_x;
-    wire signed [COORD_WIDTH-1:0] r_key_y;
-    wire        [   VN_WIDTH-1:0] r_pn;
-    wire        [TIMER_WIDTH-1:0] r_ts;
+    wire        [                  1:0] r_status;
+    wire signed [      COORD_WIDTH-1:0] r_key_x;
+    wire signed [      COORD_WIDTH-1:0] r_key_y;
+    wire        [         VN_WIDTH-1:0] r_pn;
+    wire        [      TIMER_WIDTH-1:0] r_ts;
 
     assign {r_status, r_key_x, r_key_y, r_pn, r_ts} = a_rdata_shadow;
 
+
+    // fifo pop bram 2-stage pipeline
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             a_addr_shadow <= {BUCKET_AW{1'b0}};
-            a_we_shadow   <= {BUCKET_SLOT_WIDTH{1'b0}};
             b_wdata       <= {ENTRY_WIDTH{1'b0}};
             s0_valid      <= 1'b0;
             s0_addr       <= {ADDR_WIDTH{1'b0}};
@@ -121,41 +124,45 @@ module hash_expire_manager #(
             s1_valid      <= 1'b0;
             s1_addr       <= {ADDR_WIDTH{1'b0}};
             s1_time       <= {TIMER_WIDTH{1'b0}};
+            s0_we         <= {BUCKET_SLOT_WIDTH{1'b0}};
         end else begin
-            a_we_shadow <= {BUCKET_SLOT_WIDTH{1'b0}};
             s1_valid <= s0_valid;
             s1_addr <= s0_addr;
             s1_time <= s0_time;
+            a_we_shadow <= s0_we; // NOTE: shadow read enable inside the cycle after s0 is set
 
             s0_valid <= cand_valid;
             s0_addr <= cand_addr;
             s0_time <= time_now;
 
             if (cand_valid) begin
-                a_addr_shadow <= cand_addr[ADDR_WIDTH-1-:BUCKET_AW];
-                a_we_shadow   <= cand_addr[BUCKET_SLOT_WIDTH-1:0];
+                a_addr_shadow <= cand_addr[(ADDR_WIDTH-1)-:BUCKET_AW];
+                s0_we <= cand_addr[BUCKET_SLOT_WIDTH-1:0];
             end
         end
     end
 
-    wire expired = (r_status == ST_OCCU) && ((s1_time - r_ts) > LIFE_CYCLE);
+    wire [TIMER_WIDTH-1:0] ts_reg = s1_valid ? (s1_time - r_ts) : {TIMER_WIDTH{1'b0}};
+    wire expired = (r_status == ST_OCCU) && (ts_reg >= LIFE_CYCLE);
 
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
 
         end else begin
-            fifo_in_valid <= 1'b0;
             if (s1_valid && expired) begin  // 确定expired，将数据送入fifo，给出墓碑
                 if (fifo_in_ready) begin
                     fifo_in_valid <= 1'b1;  // Push
                     fifo_in_data  <= {r_key_x, r_key_y, s1_addr, r_pn};
                 end
 
+
+                kill_valid <= 1'b1;
                 b_we <= s1_addr[BUCKET_SLOT_WIDTH-1:0];
                 b_addr <= s1_addr[ADDR_WIDTH-1-:BUCKET_AW];
                 b_wdata <= {ST_TOMB, {COORD_WIDTH{1'b0}}, {COORD_WIDTH{1'b0}}, {VN_WIDTH{1'b0}}, {TIMER_WIDTH{1'b0}}};
-            end else begin 
-                b_we <= {BUCKET_SLOT_WIDTH{1'b0}};
+            end else begin
+                kill_valid <= 1'b0;
+                fifo_in_valid <= 1'b0;
             end
         end
     end
