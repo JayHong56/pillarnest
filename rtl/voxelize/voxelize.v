@@ -90,7 +90,6 @@ module voxelize #(
         .AXIS_ADDR_WIDTH         (AXIS_ADDR_WIDTH),
         .BRAM_DATA_WIDTH         (BRAM_DATA_WIDTH),
         .BRAM_ADDR_WIDTH         (BRAM_ADDR_WIDTH),
-        .HASH_TABLE_SIZE         (HASH_TABLE_SIZE),
         .HASH_ADDR_WIDTH         (HASH_ADDR_WIDTH),
         .THRESHOLD_CLOSE         (THRESHOLD_CLOSE),
         .THRESHOLD_BOUDARY       (THRESHOLD_BOUDARY),

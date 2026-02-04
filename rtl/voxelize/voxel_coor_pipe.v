@@ -4,7 +4,6 @@ module voxel_coor_pipe #(
 
     parameter integer        AXIS_DATA_WIDTH          = 128,
     parameter integer        AXIS_ADDR_WIDTH          = 16,
-    parameter integer        HASH_TABLE_SIZE          = 256,
     parameter integer        HASH_ADDR_WIDTH          = 8,         // log2(HASH_TABLE_SIZE)
     parameter         [15:0] THRESHOLD_CLOSE          = 16'h0100,  // 1.00m
     parameter         [15:0] THRESHOLD_BOUDARY        = 16'h3600,  // 54.00m
@@ -267,7 +266,6 @@ module voxel_coor_pipe #(
         .LIFE_CYCLE       (LIFE_CYCLE),
         .TIMER_WIDTH      (16),               // max 37560
         .ADDR_WIDTH       (HASH_ADDR_WIDTH),
-        .TABLE_SIZE       (HASH_TABLE_SIZE),
         .BUCKETS          (64),
         .BUCKET_SLOT_WIDTH(2)
     ) u_hash_table_tombstone (

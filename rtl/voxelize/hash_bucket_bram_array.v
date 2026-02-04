@@ -6,7 +6,11 @@ module hash_bucket_array #(
     input wire clk,
 
     // Port A
-    input  wire [BUCKET_AW-1:0]   a_addr,
+    input  wire [BUCKET_AW-1:0]   a_addr_0,
+    input  wire [BUCKET_AW-1:0]   a_addr_1,
+    input  wire [BUCKET_AW-1:0]   a_addr_2,
+    input  wire [BUCKET_AW-1:0]   a_addr_3,
+
     input  wire                   we0_a,
     input  wire                   we1_a,
     input  wire                   we2_a,
@@ -41,7 +45,7 @@ module hash_bucket_array #(
         .DEPTH(BUCKETS)
     ) u_hash_bucket_bram0 (
         .clk    (clk),
-        .a_addr (a_addr),
+        .a_addr (a_addr_0),
         .a_we   (we0_a),
         .a_wdata(wdata0_a),
         .a_rdata(rdata0_a),
@@ -56,7 +60,7 @@ module hash_bucket_array #(
         .DEPTH(BUCKETS)
     ) u_hash_bucket_bram1 (
         .clk    (clk),
-        .a_addr (a_addr),
+        .a_addr (a_addr_1),
         .a_we   (we1_a),
         .a_wdata(wdata1_a),
         .a_rdata(rdata1_a),
@@ -71,7 +75,7 @@ module hash_bucket_array #(
         .DEPTH(BUCKETS)
     ) u_hash_bucket_bram2 (
         .clk    (clk),
-        .a_addr (a_addr),
+        .a_addr (a_addr_2),
         .a_we   (we2_a),
         .a_wdata(wdata2_a),
         .a_rdata(rdata2_a),
@@ -86,7 +90,7 @@ module hash_bucket_array #(
         .DEPTH(BUCKETS)
     ) u_hash_bucket_bram3 (
         .clk    (clk),
-        .a_addr (a_addr),
+        .a_addr (a_addr_3),
         .a_we   (we3_a),
         .a_wdata(wdata3_a),
         .a_rdata(rdata3_a),

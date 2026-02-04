@@ -25,10 +25,10 @@ module hash_arbiter_wr #(
     reg fifo_rd_en;
     wire [ADDR_WIDTH-1:0] fifo_dout_addr;
 
-    wire [4:0] cnt;
+    wire [7:0] cnt;
     hash_expire_fifo_sync #(
         .WIDTH(ADDR_WIDTH),
-        .DEPTH(16)
+        .DEPTH(200)
     ) u_kill_fifo (
         .clk     (clk),
         .rst_n   (rst_n),

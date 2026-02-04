@@ -31,32 +31,28 @@ add wave -noupdate /tb_voxelize/dut/voxel_coordinate_inst/u_hash_table_tombstone
 add wave -noupdate -height 20 /tb_voxelize/dut/voxel_coordinate_inst/u_hash_table_tombstone/busy
 add wave -noupdate -height 20 /tb_voxelize/dut/voxel_coordinate_inst/u_hash_table_tombstone/found
 add wave -noupdate -height 20 /tb_voxelize/dut/voxel_coordinate_inst/u_hash_table_tombstone/did_write
-add wave -noupdate -color {Slate Blue} -height 20 -radix unsigned /tb_voxelize/dut/voxel_coordinate_inst/u_hash_table_tombstone/bucket_id
-add wave -noupdate -radix unsigned /tb_voxelize/dut/voxel_coordinate_inst/u_hash_table_tombstone/s1_bucket
 add wave -noupdate -color {Slate Blue} -height 20 -radix unsigned /tb_voxelize/dut/voxel_coordinate_inst/u_hash_table_tombstone/out_idx
 add wave -noupdate -height 20 -radix decimal /tb_voxelize/dut/voxel_coordinate_inst/u_hash_table_tombstone/out_point_number
 add wave -noupdate -color Blue -height 20 /tb_voxelize/dut/voxel_coordinate_inst/u_hash_table_tombstone/hit
 add wave -noupdate -height 20 /tb_voxelize/dut/voxel_coordinate_inst/u_hash_table_tombstone/hit_way
 add wave -noupdate -height 20 /tb_voxelize/dut/voxel_coordinate_inst/u_hash_table_tombstone/st
-add wave -noupdate -color Red -height 20 -radix unsigned /tb_voxelize/dut/voxel_coordinate_inst/u_hash_table_tombstone/a_addr
 add wave -noupdate /tb_voxelize/dut/voxel_coordinate_inst/u_hash_table_tombstone/s1_valid
 add wave -noupdate -radix unsigned /tb_voxelize/dut/voxel_coordinate_inst/fifo_level
-add wave -noupdate -expand /tb_voxelize/dut/voxel_coordinate_inst/u_hash_table_tombstone/u_hash_load_monitor/bucket_load
+add wave -noupdate /tb_voxelize/dut/voxel_coordinate_inst/u_hash_table_tombstone/u_hash_load_monitor/bucket_load
 add wave -noupdate -height 20 /tb_voxelize/dut/voxel_coordinate_inst/u_hash_table_tombstone/table_full
 add wave -noupdate /tb_voxelize/dut/voxel_coordinate_inst/u_hash_table_tombstone/m_axis_expire_tvalid
 add wave -noupdate /tb_voxelize/dut/voxel_coordinate_inst/u_hash_table_tombstone/m_axis_expire_tdata
 add wave -noupdate -color Gold -height 20 -radix decimal /tb_voxelize/dut/voxel_coordinate_inst/u_hash_table_tombstone/global_timer
-add wave -noupdate /tb_voxelize/dut/voxel_coordinate_inst/u_hash_table_tombstone/u_hash_expire_manager/expired
+add wave -noupdate -color Red /tb_voxelize/dut/voxel_coordinate_inst/u_hash_table_tombstone/u_hash_expire_manager/expired
 add wave -noupdate -radix unsigned /tb_voxelize/dut/voxel_coordinate_inst/u_hash_table_tombstone/s1_x
 add wave -noupdate -radix unsigned /tb_voxelize/dut/voxel_coordinate_inst/u_hash_table_tombstone/s1_y
-add wave -noupdate -radix unsigned /tb_voxelize/dut/voxel_coordinate_inst/u_hash_table_tombstone/s1_bucket
 add wave -noupdate /tb_voxelize/dut/voxel_coordinate_inst/u_hash_table_tombstone/rdata0_a
 add wave -noupdate /tb_voxelize/dut/voxel_coordinate_inst/u_hash_table_tombstone/rdata1_a
 add wave -noupdate /tb_voxelize/dut/voxel_coordinate_inst/u_hash_table_tombstone/rdata2_a
 add wave -noupdate /tb_voxelize/dut/voxel_coordinate_inst/u_hash_table_tombstone/rdata3_a
 add wave -noupdate -radix unsigned /tb_voxelize/dut/voxel_coordinate_inst/u_hash_table_tombstone/u_hash_expire_manager/dq_wr_ptr
 add wave -noupdate -radix unsigned /tb_voxelize/dut/voxel_coordinate_inst/u_hash_table_tombstone/u_hash_expire_manager/dq_rd_ptr
-add wave -noupdate -color Gold /tb_voxelize/dut/voxel_coordinate_inst/u_hash_table_tombstone/u_hash_expire_manager/ts_reg
+add wave -noupdate -color Gold -radix unsigned /tb_voxelize/dut/voxel_coordinate_inst/u_hash_table_tombstone/u_hash_expire_manager/ts_reg
 add wave -noupdate -radix unsigned -radixshowbase 0 /tb_voxelize/dut/voxel_coordinate_inst/u_hash_table_tombstone/u_hash_expire_manager/dq_count
 add wave -noupdate -radix unsigned -radixshowbase 0 /tb_voxelize/dut/voxel_coordinate_inst/u_hash_table_tombstone/u_hash_expire_manager/cand_addr
 add wave -noupdate /tb_voxelize/dut/voxel_coordinate_inst/u_hash_table_tombstone/u_hash_expire_manager/cand_valid
@@ -76,10 +72,8 @@ add wave -noupdate /tb_voxelize/dut/voxel_coordinate_inst/u_hash_table_tombstone
 add wave -noupdate /tb_voxelize/dut/voxel_coordinate_inst/u_hash_table_tombstone/u_arbiter/main_write_we
 add wave -noupdate /tb_voxelize/dut/voxel_coordinate_inst/u_hash_table_tombstone/kill_addr
 add wave -noupdate /tb_voxelize/dut/voxel_coordinate_inst/u_hash_table_tombstone/kill_valid
-add wave -noupdate /tb_voxelize/dut/voxel_coordinate_inst/u_hash_table_tombstone/action_probe
-add wave -noupdate -radix unsigned /tb_voxelize/dut/voxel_coordinate_inst/u_hash_table_tombstone/cnt
 TreeUpdate [SetDefaultTree]
-WaveRestoreCursors {{Cursor 13} {2835217 ps} 1} {{Cursor 14} {76314160 ps} 0}
+WaveRestoreCursors {{Cursor 13} {2835217 ps} 1} {{Cursor 14} {695000 ps} 0}
 quietly wave cursor active 2
 configure wave -namecolwidth 178
 configure wave -valuecolwidth 100
@@ -95,5 +89,5 @@ configure wave -griddelta 40
 configure wave -timeline 0
 configure wave -timelineunits us
 update
-WaveRestoreZoom {9517879 ps} {9771042 ps}
+WaveRestoreZoom {467914 ps} {1011792 ps}
 bookmark add wave bookmark0 {{106113 ps} {197926 ps}} 0

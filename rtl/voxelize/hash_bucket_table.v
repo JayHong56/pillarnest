@@ -3,10 +3,10 @@ module hash_bucket_table #(
     parameter VN_WIDTH          = 5,        // point number width
     parameter LIFE_CYCLE        = 16'd100,
     parameter TIMER_WIDTH       = 16,
-    parameter ADDR_WIDTH        = 8,        // 8 -> 256 depths
-    parameter TABLE_SIZE        = 256,
+    parameter ADDR_WIDTH        = 8,        // 9 -> 512 depths
     parameter BUCKETS           = 64,
-    parameter BUCKET_SLOT_WIDTH = 2         // 4 slots per bucket
+    parameter BUCKET_SLOT_WIDTH = 2,         // 4 slots per bucket
+    parameter TABLE_SIZE        = BUCKETS*(1'b1 << BUCKET_SLOT_WIDTH) // 256 slots
 ) (
     input wire clk,
     input wire rst_n,
@@ -33,22 +33,22 @@ module hash_bucket_table #(
     localparam ENTRY_WIDTH = 2 + COORD_WIDTH + COORD_WIDTH + VN_WIDTH + TIMER_WIDTH;
 
 
-    reg  [BUCKET_AW-1:0] a_addr;
+    reg [BUCKET_AW-1:0] a_addr_0, a_addr_1, a_addr_2, a_addr_3;
     wire [BUCKET_AW-1:0] a_addr_shadow;
-    reg  [BUCKET_AW-1:0] main_write_addr_bucket;
     reg [ENTRY_WIDTH-1:0] wdata0_b, wdata1_b, wdata2_b, wdata3_b;
     reg we0_b, we1_b, we2_b, we3_b;
+    reg [BUCKET_AW-1:0] main_write_addr_bucket;
     wire [BUCKET_SLOT_WIDTH-1:0] main_write_addr_slot = we0_b ? 2'd0 : we1_b ? 2'd1 : we2_b ? 2'd2 : we3_b ? 2'd3 : 2'd0;
     wire [ENTRY_WIDTH-1:0] rdata0_a, rdata1_a, rdata2_a, rdata3_a;
 
 
     wire [BUCKET_SLOT_WIDTH-1:0] shared_write_we;
     wire arb_we0, arb_we1, arb_we2, arb_we3;
-    wire arb_write_en;
-    assign arb_we0 = arb_write_en ? (shared_write_we == 2'd0) : 1'b0;
-    assign arb_we1 = arb_write_en ? (shared_write_we == 2'd1) : 1'b0;
-    assign arb_we2 = arb_write_en ? (shared_write_we == 2'd2) : 1'b0;
-    assign arb_we3 = arb_write_en ? (shared_write_we == 2'd3) : 1'b0;
+    wire shared_write_en;
+    assign arb_we0 = shared_write_en ? (shared_write_we == 2'd0) : 1'b0;
+    assign arb_we1 = shared_write_en ? (shared_write_we == 2'd1) : 1'b0;
+    assign arb_we2 = shared_write_en ? (shared_write_we == 2'd2) : 1'b0;
+    assign arb_we3 = shared_write_en ? (shared_write_we == 2'd3) : 1'b0;
     wire [ ADDR_WIDTH-1:0] shared_write_addr;
     wire [  BUCKET_AW-1:0] arb_addr = shared_write_addr[ADDR_WIDTH-1-:BUCKET_AW];
     wire [ENTRY_WIDTH-1:0] shared_write_data;
@@ -64,7 +64,10 @@ module hash_bucket_table #(
     ) u_hash_bucket_array (
         .clk     (clk),
         // Port A
-        .a_addr  (a_addr),
+        .a_addr_0(a_addr_0),
+        .a_addr_1(a_addr_1),
+        .a_addr_2(a_addr_2),
+        .a_addr_3(a_addr_3),
         .we0_a   (),
         .we1_a   (),
         .we2_a   (),
@@ -95,7 +98,7 @@ module hash_bucket_table #(
 
     reg we0_a_shadow, we1_a_shadow, we2_a_shadow, we3_a_shadow;
     wire [ENTRY_WIDTH-1:0] rdata0_a_shadow, rdata1_a_shadow, rdata2_a_shadow, rdata3_a_shadow;
-    hash_bucket_array #(
+    hash_bucket_array_shadow #(
         .ENTRY_WIDTH(ENTRY_WIDTH),
         .BUCKETS    (BUCKETS),
         .BUCKET_AW  (BUCKET_AW)
@@ -135,23 +138,61 @@ module hash_bucket_table #(
     // wire [10:0] y_mixed;
     // assign x_mixed = (key_x << 2) + key_x;
     // assign y_mixed = (key_y << 3) + key_y;
-    wire [BUCKET_AW-1:0] bucket_id;
+    wire [BUCKET_AW-1:0] bucket_idx_0;
+    wire [BUCKET_AW-1:0] bucket_idx_1;
+    wire [BUCKET_AW-1:0] bucket_idx_2;
+    wire [BUCKET_AW-1:0] bucket_idx_3;
+    // Hash 0: 原始
     hash_func_multiplicative #(
         .COORD_WIDTH(COORD_WIDTH),
-        .BUCKET_AW  (BUCKET_AW)
-    ) u_hash_func_multiplicative (
+        .BUCKET_AW  (BUCKET_AW),
+        .SEED       (0)             // <--- 种子 0
+    ) u_hash_func_0 (
         .key_x   (key_x),
         .key_y   (key_y),
-        .hash_out(bucket_id)
+        .hash_out(bucket_idx_0)
+    );
+
+    // Hash 1: X 取反
+    hash_func_multiplicative #(
+        .COORD_WIDTH(COORD_WIDTH),
+        .BUCKET_AW  (BUCKET_AW),
+        .SEED       (1)             // <--- 种子 1
+    ) u_hash_func_1 (
+        .key_x   (key_x),
+        .key_y   (key_y),
+        .hash_out(bucket_idx_1)
+    );
+
+    // Hash 2: Y 取反
+    hash_func_multiplicative #(
+        .COORD_WIDTH(COORD_WIDTH),
+        .BUCKET_AW  (BUCKET_AW),
+        .SEED       (2)             // <--- 种子 2
+    ) u_hash_func_2 (
+        .key_x   (key_x),
+        .key_y   (key_y),
+        .hash_out(bucket_idx_2)
+    );
+
+    // Hash 3: 异或扰动
+    hash_func_multiplicative #(
+        .COORD_WIDTH(COORD_WIDTH),
+        .BUCKET_AW  (BUCKET_AW),
+        .SEED       (3)             // <--- 种子 3
+    ) u_hash_func_3 (
+        .key_x   (key_x),
+        .key_y   (key_y),
+        .hash_out(bucket_idx_3)
     );
 
 
     reg s0_valid;
     reg signed [COORD_WIDTH-1:0] s0_x, s0_y;
-    reg [BUCKET_AW-1:0] s0_bucket;
+    reg [BUCKET_AW-1:0] s0_bucket_0, s0_bucket_1, s0_bucket_2, s0_bucket_3;
     reg s1_valid;
     reg signed [COORD_WIDTH-1:0] s1_x, s1_y;
-    reg [BUCKET_AW-1:0] s1_bucket;
+    reg [BUCKET_AW-1:0] s1_bucket_0, s1_bucket_1, s1_bucket_2, s1_bucket_3;
 
     reg [TIMER_WIDTH-1:0] global_timer;
     wire did_write = we0_b | we1_b | we2_b | we3_b;
@@ -159,6 +200,7 @@ module hash_bucket_table #(
                                         (we1_b) ? wdata1_b :
                                         (we2_b) ? wdata2_b :
                                         (we3_b) ? wdata3_b : {ENTRY_WIDTH{1'b0}};
+
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) global_timer <= 0;
         else if (did_write) global_timer <= global_timer + 1'b1;
@@ -219,9 +261,9 @@ module hash_bucket_table #(
         .a_we_shadow   (a_we_shadow),
         .a_rdata_shadow(a_rdata_shadow),
 
-        .b_wdata(kill_wdata),
-        .b_addr (kill_addr_bucket),
-        .b_we   (kill_we_bucket),
+        .b_wdata   (kill_wdata),
+        .b_addr    (kill_addr_bucket),
+        .b_we      (kill_we_bucket),
         .kill_valid(kill_valid),
 
         .m_axis_expire_tvalid(m_axis_expire_tvalid),
@@ -246,9 +288,9 @@ module hash_bucket_table #(
         .expired_write_valid(kill_valid),  // 来自 Expire Manager
         .expired_write_addr (kill_addr),   // {bucket, slot}
 
-        .arb_we   (shared_write_we),
-        .arb_waddr(shared_write_addr),
-        .arb_wdata(shared_write_data),
+        .arb_we      (shared_write_we),
+        .arb_waddr   (shared_write_addr),
+        .arb_wdata   (shared_write_data),
         .arb_write_en(shared_write_en),
 
         .did_write_expired(did_write_expired)
@@ -257,49 +299,163 @@ module hash_bucket_table #(
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             s0_valid <= 1'b0;
-            a_addr <= 0;
+            a_addr_0 <= 0;
+            a_addr_1 <= 0;
+            a_addr_2 <= 0;
+            a_addr_3 <= 0;
             s1_valid <= 1'b0;
-            s1_bucket <= 0;
-        end else begin
-            s1_valid  <= s0_valid;
-            s1_x      <= s0_x;
-            s1_y      <= s0_y;
-            s1_bucket <= s0_bucket;
 
-            s0_valid  <= req_valid;
+            s1_bucket_0 <= 0;
+            s1_bucket_1 <= 0;
+            s1_bucket_2 <= 0;
+            s1_bucket_3 <= 0;
+        end else begin
+            s1_valid    <= s0_valid;
+            s1_x        <= s0_x;
+            s1_y        <= s0_y;
+            s1_bucket_0 <= s0_bucket_0;
+            s1_bucket_1 <= s0_bucket_1;
+            s1_bucket_2 <= s0_bucket_2;
+            s1_bucket_3 <= s0_bucket_3;
+
+            s0_valid    <= req_valid;
             if (req_valid) begin
                 // 寄存
-                s0_x      <= key_x;
-                s0_y      <= key_y;
-                s0_bucket <= bucket_id;
+                s0_x        <= key_x;
+                s0_y        <= key_y;
+                s0_bucket_0 <= bucket_idx_0;
+                s0_bucket_1 <= bucket_idx_1;
+                s0_bucket_2 <= bucket_idx_2;
+                s0_bucket_3 <= bucket_idx_3;
                 // 请求读取
-                a_addr    <= bucket_id;  // issue read to all 4 BRAMs
+                a_addr_0    <= bucket_idx_0;  // issue read to all 4 BRAMs
+                a_addr_1    <= bucket_idx_1;
+                a_addr_2    <= bucket_idx_2;
+                a_addr_3    <= bucket_idx_3;
             end
         end
     end
+
 
     integer i;
-    reg hit, free_found;
-    reg [1:0] hit_way, free_way;  // 0-3
-    always @(*) begin
-        hit = 1'b0;
-        hit_way = 2'd0;
-        free_found = 1'b0;
-        free_way = 2'd0;
+    reg hit;
+    reg [1:0] hit_way;
+    reg free_found;
+    reg [1:0] free_way;
 
+    reg [1:0] free_way_rr;
+    reg free_found_rr;
+    reg [1:0] rr_ptr;
+
+    wire [3:0] free_mask = {
+        (st[3] == ST_EMPTY || st[3] == ST_TOMB),
+        (st[2] == ST_EMPTY || st[2] == ST_TOMB),
+        (st[1] == ST_EMPTY || st[1] == ST_TOMB),
+        (st[0] == ST_EMPTY || st[0] == ST_TOMB)
+    };
+
+    always @(*) begin
+        // --------------------
+        // 1) 默认值
+        // --------------------
+        hit     = 1'b0;
+        hit_way = 2'd0;
+
+        // --------------------
+        // 2) hit 扫描：保持原逻辑
+        // --------------------
         for (i = 0; i < 4; i = i + 1) begin
-            if (!hit && st[i] == ST_OCCU && kx[i] == s1_x && ky[i] == s1_y) begin  // hit
-                hit = 1'b1;
+            if (!hit && st[i] == ST_OCCU && kx[i] == s1_x && ky[i] == s1_y) begin
+                hit     = 1'b1;
                 hit_way = i[1:0];
             end
-
-            if (!free_found && ((st[i] == ST_EMPTY || st[i] == ST_TOMB))) begin  // empty or tomb
-                free_found = 1'b1;
-                free_way   = i[1:0];
-            end
         end
+
+        // --------------------
+        // 3) free 选择：Round-Robin，从 rr_ptr 开始找第一个空
+        // --------------------
+        free_found_rr = 1'b0;
+        free_way_rr   = 2'd0;
+
+        case (rr_ptr)
+            2'd0: begin
+                if (free_mask[0]) begin
+                    free_found_rr = 1'b1;
+                    free_way_rr   = 2'd0;
+                end else if (free_mask[1]) begin
+                    free_found_rr = 1'b1;
+                    free_way_rr   = 2'd1;
+                end else if (free_mask[2]) begin
+                    free_found_rr = 1'b1;
+                    free_way_rr   = 2'd2;
+                end else if (free_mask[3]) begin
+                    free_found_rr = 1'b1;
+                    free_way_rr   = 2'd3;
+                end
+            end
+            2'd1: begin
+                if (free_mask[1]) begin
+                    free_found_rr = 1'b1;
+                    free_way_rr   = 2'd1;
+                end else if (free_mask[2]) begin
+                    free_found_rr = 1'b1;
+                    free_way_rr   = 2'd2;
+                end else if (free_mask[3]) begin
+                    free_found_rr = 1'b1;
+                    free_way_rr   = 2'd3;
+                end else if (free_mask[0]) begin
+                    free_found_rr = 1'b1;
+                    free_way_rr   = 2'd0;
+                end
+            end
+            2'd2: begin
+                if (free_mask[2]) begin
+                    free_found_rr = 1'b1;
+                    free_way_rr   = 2'd2;
+                end else if (free_mask[3]) begin
+                    free_found_rr = 1'b1;
+                    free_way_rr   = 2'd3;
+                end else if (free_mask[0]) begin
+                    free_found_rr = 1'b1;
+                    free_way_rr   = 2'd0;
+                end else if (free_mask[1]) begin
+                    free_found_rr = 1'b1;
+                    free_way_rr   = 2'd1;
+                end
+            end
+            2'd3: begin
+                if (free_mask[3]) begin
+                    free_found_rr = 1'b1;
+                    free_way_rr   = 2'd3;
+                end else if (free_mask[0]) begin
+                    free_found_rr = 1'b1;
+                    free_way_rr   = 2'd0;
+                end else if (free_mask[1]) begin
+                    free_found_rr = 1'b1;
+                    free_way_rr   = 2'd1;
+                end else if (free_mask[2]) begin
+                    free_found_rr = 1'b1;
+                    free_way_rr   = 2'd2;
+                end
+            end
+        endcase
+
+        // 输出给后续写回逻辑用
+        free_found = free_found_rr;
+        free_way   = free_way_rr;
     end
 
+    function [BUCKET_AW-1:0] addr_of_way;
+        input [1:0] way;
+        begin
+            case (way)
+                2'd0: addr_of_way = s1_bucket_0;
+                2'd1: addr_of_way = s1_bucket_1;
+                2'd2: addr_of_way = s1_bucket_2;
+                2'd3: addr_of_way = s1_bucket_3;
+            endcase
+        end
+    endfunction
 
     integer fp;  // 文件句柄
     initial begin
@@ -307,7 +463,7 @@ module hash_bucket_table #(
         fp = $fopen("ssimulation_result.csv", "w");
 
         // 2. 写入表头 (可选)
-        $fwrite(fp, "Key_X, Key_Y, Bucket_ID\n");
+        $fwrite(fp, "Key_X, Key_Y, Bucket_ID, Total_Load\n");
     end
 
     always @(posedge clk or negedge rst_n) begin
@@ -327,6 +483,8 @@ module hash_bucket_table #(
             table_full <= 0;
             out_idx <= 0;
             out_point_number <= 0;
+
+            rr_ptr <= 2'd0;
         end else begin
             // defaults
             we0_b <= 0;
@@ -339,11 +497,12 @@ module hash_bucket_table #(
 
             if (s1_valid) begin
                 busy <= 1'b1;
-                main_write_addr_bucket <= s1_bucket;
 
                 if (hit) begin
                     found <= 1'b1;
-                    out_idx <= {s1_bucket, hit_way};
+                    out_idx <= {addr_of_way(hit_way), hit_way};
+                    main_write_addr_bucket <= addr_of_way(hit_way);
+
                     out_point_number <= pn[hit_way] + 1'b1;
                     case (hit_way)
                         2'd0: begin
@@ -365,7 +524,9 @@ module hash_bucket_table #(
                     endcase
                 end else if (free_found) begin
                     found <= 1'b1;
-                    out_idx <= {s1_bucket, free_way};
+                    out_idx <= {addr_of_way(free_way), free_way};
+                    main_write_addr_bucket <= addr_of_way(free_way);
+
                     out_point_number <= {{(VN_WIDTH - 1) {1'b0}}, 1'b1};
                     case (free_way)
                         2'd0: begin
@@ -385,7 +546,7 @@ module hash_bucket_table #(
                             wdata3_b <= make_entry(ST_OCCU, s1_x, s1_y, {{(VN_WIDTH - 1) {1'b0}}, 1'b1}, global_timer);
                         end
                     endcase
-
+                    rr_ptr <= rr_ptr + 2'd1;
                 end else begin
                     table_full <= 1'b1;
                 end
@@ -393,9 +554,10 @@ module hash_bucket_table #(
         end
     end
 
+    wire [8:0] total_load;
     hash_load_monitor #(
-        .BUCKETS  (64),
-        .BUCKET_AW(6),
+        .BUCKETS  (BUCKETS),
+        .BUCKET_AW(BUCKET_AW),
         .MAX_SLOTS(4)
     ) u_hash_load_monitor (
         .clk            (clk),
@@ -410,7 +572,8 @@ module hash_bucket_table #(
 
         .debug_addr        (),
         .debug_load        (),
-        .total_full_buckets(total_full_buckets)
+        .total_full_buckets(total_full_buckets),
+        .total_load        (total_load)
     );
 
     always @(posedge clk) begin
@@ -418,7 +581,7 @@ module hash_bucket_table #(
         if (did_write) begin
             // %0t: 时间, %d: 十进制, %h: 十六进制
             // 这里的信号名要换成你模块里实际的信号
-            $fwrite(fp, "%d, %d, %d\n", s1_x, s1_y, out_idx);
+            $fwrite(fp, "%d, %d, %d, %d\n", s1_x, s1_y, out_idx, total_load);
         end
     end
 
