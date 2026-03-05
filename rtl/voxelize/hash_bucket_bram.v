@@ -5,13 +5,11 @@ module hash_bucket_bram #(
 )(
     input  wire             clk,
 
-    // Port A
     input  wire [AW-1:0]    a_addr,
     input  wire             a_we,
     input  wire [WIDTH-1:0] a_wdata,
     output reg  [WIDTH-1:0] a_rdata,
 
-    // Port B
     input  wire [AW-1:0]    b_addr,
     input  wire             b_we,
     input  wire [WIDTH-1:0] b_wdata,
@@ -26,12 +24,16 @@ module hash_bucket_bram #(
     end
 
     always @(posedge clk) begin
-        // Port A
+        if (b_we && (b_addr == a_addr)) begin
+            a_rdata <= b_wdata;     
+        end else begin
+            a_rdata <= mem[a_addr];  
+        end
+        
         if (a_we) mem[a_addr] <= a_wdata;
-        a_rdata <= mem[a_addr];
 
-        // Port B
         if (b_we) mem[b_addr] <= b_wdata;
-        b_rdata <= mem[b_addr];
+        b_rdata <= mem[b_addr]; 
+        
     end
 endmodule

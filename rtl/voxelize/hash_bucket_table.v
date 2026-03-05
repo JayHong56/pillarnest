@@ -1,19 +1,20 @@
 module hash_bucket_table #(
     parameter COORD_WIDTH       = 11,
-    parameter VN_WIDTH          = 5,        // point number width
+    parameter VN_WIDTH          = 5,                                     // point number width
     parameter LIFE_CYCLE        = 16'd100,
     parameter TIMER_WIDTH       = 16,
-    parameter ADDR_WIDTH        = 8,        // 9 -> 512 depths
+    parameter ADDR_WIDTH        = 8,                                     // 9 -> 512 depths
     parameter BUCKETS           = 64,
-    parameter BUCKET_SLOT_WIDTH = 2,         // 4 slots per bucket
-    parameter TABLE_SIZE        = BUCKETS*(1'b1 << BUCKET_SLOT_WIDTH) // 256 slots
+    parameter BUCKET_SLOT_WIDTH = 2,                                     // 4 slots per bucket
+    parameter TABLE_SIZE        = BUCKETS * (1'b1 << BUCKET_SLOT_WIDTH)  // 256 slots
 ) (
     input wire clk,
     input wire rst_n,
 
-    input wire                          req_valid,
-    input wire signed [COORD_WIDTH-1:0] key_x,
-    input wire signed [COORD_WIDTH-1:0] key_y,
+    input  wire                          req_valid,
+    output wire                          req_ready,
+    input  wire signed [COORD_WIDTH-1:0] key_x,
+    input  wire signed [COORD_WIDTH-1:0] key_y,
 
     output reg                                          busy,
     output reg                                          found,
@@ -37,25 +38,10 @@ module hash_bucket_table #(
     wire [BUCKET_AW-1:0] a_addr_shadow;
     reg [ENTRY_WIDTH-1:0] wdata0_b, wdata1_b, wdata2_b, wdata3_b;
     reg we0_b, we1_b, we2_b, we3_b;
-    reg [BUCKET_AW-1:0] main_write_addr_bucket;
-    wire [BUCKET_SLOT_WIDTH-1:0] main_write_addr_slot = we0_b ? 2'd0 : we1_b ? 2'd1 : we2_b ? 2'd2 : we3_b ? 2'd3 : 2'd0;
+    reg [BUCKET_AW-1:0] shared_write_addr_bucket;
+    wire [BUCKET_SLOT_WIDTH-1:0] shared_write_addr_slot = we0_b ? 2'd0 : we1_b ? 2'd1 : we2_b ? 2'd2 : we3_b ? 2'd3 : 2'd0;
+    wire [ADDR_WIDTH-1:0] shared_write_addr = {shared_write_addr_bucket, shared_write_addr_slot};
     wire [ENTRY_WIDTH-1:0] rdata0_a, rdata1_a, rdata2_a, rdata3_a;
-
-
-    wire [BUCKET_SLOT_WIDTH-1:0] shared_write_we;
-    wire arb_we0, arb_we1, arb_we2, arb_we3;
-    wire shared_write_en;
-    assign arb_we0 = shared_write_en ? (shared_write_we == 2'd0) : 1'b0;
-    assign arb_we1 = shared_write_en ? (shared_write_we == 2'd1) : 1'b0;
-    assign arb_we2 = shared_write_en ? (shared_write_we == 2'd2) : 1'b0;
-    assign arb_we3 = shared_write_en ? (shared_write_we == 2'd3) : 1'b0;
-    wire [ ADDR_WIDTH-1:0] shared_write_addr;
-    wire [  BUCKET_AW-1:0] arb_addr = shared_write_addr[ADDR_WIDTH-1-:BUCKET_AW];
-    wire [ENTRY_WIDTH-1:0] shared_write_data;
-    wire [ENTRY_WIDTH-1:0] arb_wdata0 = arb_we0 ? shared_write_data : {ENTRY_WIDTH{1'b0}};
-    wire [ENTRY_WIDTH-1:0] arb_wdata1 = arb_we1 ? shared_write_data : {ENTRY_WIDTH{1'b0}};
-    wire [ENTRY_WIDTH-1:0] arb_wdata2 = arb_we2 ? shared_write_data : {ENTRY_WIDTH{1'b0}};
-    wire [ENTRY_WIDTH-1:0] arb_wdata3 = arb_we3 ? shared_write_data : {ENTRY_WIDTH{1'b0}};
 
     hash_bucket_array #(
         .ENTRY_WIDTH(ENTRY_WIDTH),
@@ -81,15 +67,15 @@ module hash_bucket_table #(
         .rdata2_a(rdata2_a),
         .rdata3_a(rdata3_a),
         // Port B
-        .b_addr  (arb_addr),
-        .we0_b   (arb_we0),
-        .we1_b   (arb_we1),
-        .we2_b   (arb_we2),
-        .we3_b   (arb_we3),
-        .wdata0_b(arb_wdata0),
-        .wdata1_b(arb_wdata1),
-        .wdata2_b(arb_wdata2),
-        .wdata3_b(arb_wdata3),
+        .b_addr  (shared_write_addr_bucket),
+        .we0_b   (we0_b),
+        .we1_b   (we1_b),
+        .we2_b   (we2_b),
+        .we3_b   (we3_b),
+        .wdata0_b(wdata0_b),
+        .wdata1_b(wdata1_b),
+        .wdata2_b(wdata2_b),
+        .wdata3_b(wdata3_b),
         .rdata0_b(),
         .rdata1_b(),
         .rdata2_b(),
@@ -119,25 +105,21 @@ module hash_bucket_table #(
         .rdata2_a(rdata2_a_shadow),
         .rdata3_a(rdata3_a_shadow),
         // Port B
-        .b_addr  (arb_addr),
-        .we0_b   (arb_we0),
-        .we1_b   (arb_we1),
-        .we2_b   (arb_we2),
-        .we3_b   (arb_we3),
-        .wdata0_b(arb_wdata0),
-        .wdata1_b(arb_wdata1),
-        .wdata2_b(arb_wdata2),
-        .wdata3_b(arb_wdata3),
+        .b_addr  (shared_write_addr_bucket),
+        .we0_b   (we0_b),
+        .we1_b   (we1_b),
+        .we2_b   (we2_b),
+        .we3_b   (we3_b),
+        .wdata0_b(wdata0_b),
+        .wdata1_b(wdata1_b),
+        .wdata2_b(wdata2_b),
+        .wdata3_b(wdata3_b),
         .rdata0_b(),
         .rdata1_b(),
         .rdata2_b(),
         .rdata3_b()
     );
 
-    // wire [10:0] x_mixed;
-    // wire [10:0] y_mixed;
-    // assign x_mixed = (key_x << 2) + key_x;
-    // assign y_mixed = (key_y << 3) + key_y;
     wire [BUCKET_AW-1:0] bucket_idx_0;
     wire [BUCKET_AW-1:0] bucket_idx_1;
     wire [BUCKET_AW-1:0] bucket_idx_2;
@@ -186,7 +168,6 @@ module hash_bucket_table #(
         .hash_out(bucket_idx_3)
     );
 
-
     reg s0_valid;
     reg signed [COORD_WIDTH-1:0] s0_x, s0_y;
     reg [BUCKET_AW-1:0] s0_bucket_0, s0_bucket_1, s0_bucket_2, s0_bucket_3;
@@ -194,13 +175,18 @@ module hash_bucket_table #(
     reg signed [COORD_WIDTH-1:0] s1_x, s1_y;
     reg [BUCKET_AW-1:0] s1_bucket_0, s1_bucket_1, s1_bucket_2, s1_bucket_3;
 
-    reg [TIMER_WIDTH-1:0] global_timer;
-    wire did_write = we0_b | we1_b | we2_b | we3_b;
+    wire kill_valid;
+    reg kill_write;
+    wire action_hit;
+    wire action_free;
+    wire action_kill;
+    wire action_full;
+    wire did_write = (action_hit | action_free) & (!kill_valid) & (!kill_write);
     wire [ENTRY_WIDTH-1:0] main_write_data = (we0_b) ? wdata0_b :
                                         (we1_b) ? wdata1_b :
                                         (we2_b) ? wdata2_b :
                                         (we3_b) ? wdata3_b : {ENTRY_WIDTH{1'b0}};
-
+    reg [TIMER_WIDTH-1:0] global_timer;
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) global_timer <= 0;
         else if (did_write) global_timer <= global_timer + 1'b1;
@@ -217,15 +203,32 @@ module hash_bucket_table #(
         end
     endfunction
 
+    // ---------------- bypass (forwarding) ----------------
+    // 只对“主写回”做旁路：did_write=1 时，shared_write_addr_bucket/slot 和 main_write_data 有效
+    wire bypass_en = did_write;
+    reg delay_kill_write;
+
+    // 旁路命中：当 s1 正在看的某一路 bucket == 写回 bucket，并且该路的 slot == 写回 slot
+    wire bypass0 = bypass_en && (!delay_kill_write) && (s1_bucket_0 == shared_write_addr_bucket) && (shared_write_addr_slot == 2'd0);
+    wire bypass1 = bypass_en && (!delay_kill_write) && (s1_bucket_1 == shared_write_addr_bucket) && (shared_write_addr_slot == 2'd1);
+    wire bypass2 = bypass_en && (!delay_kill_write) && (s1_bucket_2 == shared_write_addr_bucket) && (shared_write_addr_slot == 2'd2);
+    wire bypass3 = bypass_en && (!delay_kill_write) && (s1_bucket_3 == shared_write_addr_bucket) && (shared_write_addr_slot == 2'd3);
+
+    // 将读口数据在命中时替换为写回数据
+    wire [ENTRY_WIDTH-1:0] rdata0_a_eff = bypass0 ? main_write_data : rdata0_a;
+    wire [ENTRY_WIDTH-1:0] rdata1_a_eff = bypass1 ? main_write_data : rdata1_a;
+    wire [ENTRY_WIDTH-1:0] rdata2_a_eff = bypass2 ? main_write_data : rdata2_a;
+    wire [ENTRY_WIDTH-1:0] rdata3_a_eff = bypass3 ? main_write_data : rdata3_a;
+
     wire [1:0] st[0:3];
     wire signed [COORD_WIDTH-1:0] kx[0:3];
     wire signed [COORD_WIDTH-1:0] ky[0:3];
     wire [VN_WIDTH-1:0] pn[0:3];
     wire [TIMER_WIDTH-1:0] ts[0:3];
-    assign {st[0], kx[0], ky[0], pn[0], ts[0]} = rdata0_a;
-    assign {st[1], kx[1], ky[1], pn[1], ts[1]} = rdata1_a;
-    assign {st[2], kx[2], ky[2], pn[2], ts[2]} = rdata2_a;
-    assign {st[3], kx[3], ky[3], pn[3], ts[3]} = rdata3_a;
+    assign {st[0], kx[0], ky[0], pn[0], ts[0]} = rdata0_a_eff;
+    assign {st[1], kx[1], ky[1], pn[1], ts[1]} = rdata1_a_eff;
+    assign {st[2], kx[2], ky[2], pn[2], ts[2]} = rdata2_a_eff;
+    assign {st[3], kx[3], ky[3], pn[3], ts[3]} = rdata3_a_eff;
 
     // shadow array select signal
     wire [BUCKET_SLOT_WIDTH-1:0] a_we_shadow;
@@ -238,7 +241,7 @@ module hash_bucket_table #(
     wire [BUCKET_SLOT_WIDTH-1:0] kill_we_bucket;
     wire [ENTRY_WIDTH-1:0] kill_wdata;
     wire [ADDR_WIDTH-1:0] kill_addr = {kill_addr_bucket, kill_we_bucket};
-    wire kill_valid;
+    wire kill_expired;
     hash_expire_manager #(
         .COORD_WIDTH      (COORD_WIDTH),
         .VN_WIDTH         (VN_WIDTH),
@@ -261,109 +264,35 @@ module hash_bucket_table #(
         .a_we_shadow   (a_we_shadow),
         .a_rdata_shadow(a_rdata_shadow),
 
-        .b_wdata   (kill_wdata),
-        .b_addr    (kill_addr_bucket),
-        .b_we      (kill_we_bucket),
-        .kill_valid(kill_valid),
+        .b_wdata     (kill_wdata),
+        .b_addr      (kill_addr_bucket),
+        .b_we        (kill_we_bucket),
+        .kill_valid  (kill_valid),
+        .kill_expired(kill_expired),
 
         .m_axis_expire_tvalid(m_axis_expire_tvalid),
         .m_axis_expire_tready(m_axis_expire_tready),
         .m_axis_expire_tdata (m_axis_expire_tdata)
     );
 
-    wire [ADDR_WIDTH-1:0] main_write_addr = {main_write_addr_bucket, main_write_addr_slot};
-    wire did_write_expired;
-    hash_arbiter_wr #(
-        .ADDR_WIDTH     (ADDR_WIDTH),
-        .ENTRY_WIDTH    (ENTRY_WIDTH),
-        .HASH_SLOT_WIDTH(BUCKET_SLOT_WIDTH)
-    ) u_arbiter (
-        .clk  (clk),
-        .rst_n(rst_n),
-
-        .main_write_we  (did_write),        // 来自 Hash 流水线 Stage 4
-        .main_write_addr(main_write_addr),  // {bucket, slot}
-        .main_write_data(main_write_data),
-
-        .expired_write_valid(kill_valid),  // 来自 Expire Manager
-        .expired_write_addr (kill_addr),   // {bucket, slot}
-
-        .arb_we      (shared_write_we),
-        .arb_waddr   (shared_write_addr),
-        .arb_wdata   (shared_write_data),
-        .arb_write_en(shared_write_en),
-
-        .did_write_expired(did_write_expired)
-    );
-
-    always @(posedge clk or negedge rst_n) begin
-        if (!rst_n) begin
-            s0_valid <= 1'b0;
-            a_addr_0 <= 0;
-            a_addr_1 <= 0;
-            a_addr_2 <= 0;
-            a_addr_3 <= 0;
-            s1_valid <= 1'b0;
-
-            s1_bucket_0 <= 0;
-            s1_bucket_1 <= 0;
-            s1_bucket_2 <= 0;
-            s1_bucket_3 <= 0;
-        end else begin
-            s1_valid    <= s0_valid;
-            s1_x        <= s0_x;
-            s1_y        <= s0_y;
-            s1_bucket_0 <= s0_bucket_0;
-            s1_bucket_1 <= s0_bucket_1;
-            s1_bucket_2 <= s0_bucket_2;
-            s1_bucket_3 <= s0_bucket_3;
-
-            s0_valid    <= req_valid;
-            if (req_valid) begin
-                // 寄存
-                s0_x        <= key_x;
-                s0_y        <= key_y;
-                s0_bucket_0 <= bucket_idx_0;
-                s0_bucket_1 <= bucket_idx_1;
-                s0_bucket_2 <= bucket_idx_2;
-                s0_bucket_3 <= bucket_idx_3;
-                // 请求读取
-                a_addr_0    <= bucket_idx_0;  // issue read to all 4 BRAMs
-                a_addr_1    <= bucket_idx_1;
-                a_addr_2    <= bucket_idx_2;
-                a_addr_3    <= bucket_idx_3;
-            end
-        end
-    end
-
-
     integer i;
     reg hit;
     reg [1:0] hit_way;
     reg free_found;
     reg [1:0] free_way;
-
     reg [1:0] free_way_rr;
     reg free_found_rr;
     reg [1:0] rr_ptr;
-
     wire [3:0] free_mask = {
         (st[3] == ST_EMPTY || st[3] == ST_TOMB),
         (st[2] == ST_EMPTY || st[2] == ST_TOMB),
         (st[1] == ST_EMPTY || st[1] == ST_TOMB),
         (st[0] == ST_EMPTY || st[0] == ST_TOMB)
     };
-
     always @(*) begin
-        // --------------------
-        // 1) 默认值
-        // --------------------
         hit     = 1'b0;
         hit_way = 2'd0;
 
-        // --------------------
-        // 2) hit 扫描：保持原逻辑
-        // --------------------
         for (i = 0; i < 4; i = i + 1) begin
             if (!hit && st[i] == ST_OCCU && kx[i] == s1_x && ky[i] == s1_y) begin
                 hit     = 1'b1;
@@ -371,9 +300,6 @@ module hash_bucket_table #(
             end
         end
 
-        // --------------------
-        // 3) free 选择：Round-Robin，从 rr_ptr 开始找第一个空
-        // --------------------
         free_found_rr = 1'b0;
         free_way_rr   = 2'd0;
 
@@ -466,25 +392,38 @@ module hash_bucket_table #(
         $fwrite(fp, "Key_X, Key_Y, Bucket_ID, Total_Load\n");
     end
 
+    // -------- actions for current s1 (combinational) --------
+    assign req_ready   = !kill_write & !kill_valid & !kill_expired;  // 
+
+    // -------- actions for current s1 (combinational) --------
+    assign action_hit  = s1_valid && hit && (!action_kill) && (!kill_write);
+    assign action_free = s1_valid && (!hit) && free_found && (!action_kill) && (!kill_write);
+    assign action_full = s1_valid && (!hit) && (!free_found) && (!action_kill) && (!kill_write);
+
+    assign action_kill = kill_valid;
+    reg signed [COORD_WIDTH-1:0] debug_s1_x, debug_s1_y;
+
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            we0_b <= 0;
-            we1_b <= 0;
-            we2_b <= 0;
-            we3_b <= 0;
-            wdata0_b <= 0;
-            wdata1_b <= 0;
-            wdata2_b <= 0;
-            wdata3_b <= 0;
-            main_write_addr_bucket <= 0;
+            kill_write               <= 1'b0;
 
-            busy <= 0;
-            found <= 0;
-            table_full <= 0;
-            out_idx <= 0;
-            out_point_number <= 0;
+            we0_b                    <= 0;
+            we1_b                    <= 0;
+            we2_b                    <= 0;
+            we3_b                    <= 0;
+            wdata0_b                 <= 0;
+            wdata1_b                 <= 0;
+            wdata2_b                 <= 0;
+            wdata3_b                 <= 0;
+            shared_write_addr_bucket <= 0;
 
-            rr_ptr <= 2'd0;
+            busy                     <= 0;
+            found                    <= 0;
+            table_full               <= 0;
+            out_idx                  <= 0;
+            out_point_number         <= 0;
+
+            rr_ptr                   <= 2'd0;
         end else begin
             // defaults
             we0_b <= 0;
@@ -495,66 +434,129 @@ module hash_bucket_table #(
             found <= 0;
             table_full <= 0;
 
-            if (s1_valid) begin
+            if (action_hit) begin
                 busy <= 1'b1;
+                found <= 1'b1;
+                out_idx <= {addr_of_way(hit_way), hit_way};
+                shared_write_addr_bucket <= addr_of_way(hit_way);
+                out_point_number <= pn[hit_way] + 1'b1;
+                case (hit_way)
+                    2'd0: begin
+                        we0_b <= 1;
+                        wdata0_b <= make_entry(ST_OCCU, s1_x, s1_y, pn[0] + 1'b1, global_timer);
+                    end
+                    2'd1: begin
+                        we1_b <= 1;
+                        wdata1_b <= make_entry(ST_OCCU, s1_x, s1_y, pn[1] + 1'b1, global_timer);
+                    end
+                    2'd2: begin
+                        we2_b <= 1;
+                        wdata2_b <= make_entry(ST_OCCU, s1_x, s1_y, pn[2] + 1'b1, global_timer);
+                    end
+                    2'd3: begin
+                        we3_b <= 1;
+                        wdata3_b <= make_entry(ST_OCCU, s1_x, s1_y, pn[3] + 1'b1, global_timer);
+                    end
+                endcase
+                debug_s1_x <= s1_x;
+                debug_s1_y <= s1_y;
 
-                if (hit) begin
-                    found <= 1'b1;
-                    out_idx <= {addr_of_way(hit_way), hit_way};
-                    main_write_addr_bucket <= addr_of_way(hit_way);
+            end else if (action_free) begin
+                busy <= 1'b1;
+                found <= 1'b1;
+                out_idx <= {addr_of_way(free_way), free_way};
+                shared_write_addr_bucket <= addr_of_way(free_way);
+                out_point_number <= {{(VN_WIDTH - 1) {1'b0}}, 1'b1};
+                case (free_way)
+                    2'd0: begin
+                        we0_b <= 1;
+                        wdata0_b <= make_entry(ST_OCCU, s1_x, s1_y, {{(VN_WIDTH - 1) {1'b0}}, 1'b1}, global_timer);
+                    end
+                    2'd1: begin
+                        we1_b <= 1;
+                        wdata1_b <= make_entry(ST_OCCU, s1_x, s1_y, {{(VN_WIDTH - 1) {1'b0}}, 1'b1}, global_timer);
+                    end
+                    2'd2: begin
+                        we2_b <= 1;
+                        wdata2_b <= make_entry(ST_OCCU, s1_x, s1_y, {{(VN_WIDTH - 1) {1'b0}}, 1'b1}, global_timer);
+                    end
+                    2'd3: begin
+                        we3_b <= 1;
+                        wdata3_b <= make_entry(ST_OCCU, s1_x, s1_y, {{(VN_WIDTH - 1) {1'b0}}, 1'b1}, global_timer);
+                    end
+                endcase
+                rr_ptr <= rr_ptr + 2'd1;
+                debug_s1_x <= s1_x;
+                debug_s1_y <= s1_y;
 
-                    out_point_number <= pn[hit_way] + 1'b1;
-                    case (hit_way)
-                        2'd0: begin
-                            we0_b <= 1;
-                            wdata0_b <= make_entry(ST_OCCU, s1_x, s1_y, pn[0] + 1'b1, global_timer);
-                        end
-                        2'd1: begin
-                            we1_b <= 1;
-                            wdata1_b <= make_entry(ST_OCCU, s1_x, s1_y, pn[1] + 1'b1, global_timer);
-                        end
-                        2'd2: begin
-                            we2_b <= 1;
-                            wdata2_b <= make_entry(ST_OCCU, s1_x, s1_y, pn[2] + 1'b1, global_timer);
-                        end
-                        2'd3: begin
-                            we3_b <= 1;
-                            wdata3_b <= make_entry(ST_OCCU, s1_x, s1_y, pn[3] + 1'b1, global_timer);
-                        end
-                    endcase
-                end else if (free_found) begin
-                    found <= 1'b1;
-                    out_idx <= {addr_of_way(free_way), free_way};
-                    main_write_addr_bucket <= addr_of_way(free_way);
+            end else if (action_full) begin
+                table_full <= 1'b1;
+            end
 
-                    out_point_number <= {{(VN_WIDTH - 1) {1'b0}}, 1'b1};
-                    case (free_way)
-                        2'd0: begin
-                            we0_b <= 1;
-                            wdata0_b <= make_entry(ST_OCCU, s1_x, s1_y, {{(VN_WIDTH - 1) {1'b0}}, 1'b1}, global_timer);
-                        end
-                        2'd1: begin
-                            we1_b <= 1;
-                            wdata1_b <= make_entry(ST_OCCU, s1_x, s1_y, {{(VN_WIDTH - 1) {1'b0}}, 1'b1}, global_timer);
-                        end
-                        2'd2: begin
-                            we2_b <= 1;
-                            wdata2_b <= make_entry(ST_OCCU, s1_x, s1_y, {{(VN_WIDTH - 1) {1'b0}}, 1'b1}, global_timer);
-                        end
-                        2'd3: begin
-                            we3_b <= 1;
-                            wdata3_b <= make_entry(ST_OCCU, s1_x, s1_y, {{(VN_WIDTH - 1) {1'b0}}, 1'b1}, global_timer);
-                        end
-                    endcase
-                    rr_ptr <= rr_ptr + 2'd1;
-                end else begin
-                    table_full <= 1'b1;
+            if (action_kill) begin
+                kill_write <= 1'b1;
+                we0_b <= kill_addr[BUCKET_SLOT_WIDTH-1:0] == 2'd0;
+                we1_b <= kill_addr[BUCKET_SLOT_WIDTH-1:0] == 2'd1;
+                we2_b <= kill_addr[BUCKET_SLOT_WIDTH-1:0] == 2'd2;
+                we3_b <= kill_addr[BUCKET_SLOT_WIDTH-1:0] == 2'd3;
+
+                shared_write_addr_bucket <= kill_addr[(ADDR_WIDTH-1)-:BUCKET_AW];
+                case (kill_addr[BUCKET_SLOT_WIDTH-1:0])
+                    2'd0: wdata0_b <= kill_wdata;
+                    2'd1: wdata1_b <= kill_wdata;
+                    2'd2: wdata2_b <= kill_wdata;
+                    2'd3: wdata3_b <= kill_wdata;
+                endcase
+                debug_s1_x <= s1_x;
+                debug_s1_y <= s1_y;
+            end else begin
+                // 当前 s1 请求结束
+                kill_write <= 1'b0;
+            end
+        end
+    end
+
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            s0_valid    <= 1'b0;
+            s1_valid    <= 1'b0;
+            s0_x        <= 0;
+            s0_y        <= 0;
+            s1_x        <= 0;
+            s1_y        <= 0;
+            s1_bucket_0 <= 0;
+            s1_bucket_1 <= 0;
+            s1_bucket_2 <= 0;
+            s1_bucket_3 <= 0;
+        end else begin
+            if (!kill_valid & !kill_expired) begin
+                s1_valid    <= s0_valid;
+                s1_x        <= s0_x;
+                s1_y        <= s0_y;
+                s1_bucket_0 <= s0_bucket_0;
+                s1_bucket_1 <= s0_bucket_1;
+                s1_bucket_2 <= s0_bucket_2;
+                s1_bucket_3 <= s0_bucket_3;
+
+                s0_valid    <= req_valid;
+                if (req_valid) begin
+                    // 寄存
+                    s0_x        <= key_x;
+                    s0_y        <= key_y;
+                    s0_bucket_0 <= bucket_idx_0;
+                    s0_bucket_1 <= bucket_idx_1;
+                    s0_bucket_2 <= bucket_idx_2;
+                    s0_bucket_3 <= bucket_idx_3;
+                    // 请求读取
+                    a_addr_0    <= bucket_idx_0;  // issue read to all 4 BRAMs
+                    a_addr_1    <= bucket_idx_1;
+                    a_addr_2    <= bucket_idx_2;
+                    a_addr_3    <= bucket_idx_3;
                 end
             end
         end
     end
 
-    wire [8:0] total_load;
     hash_load_monitor #(
         .BUCKETS  (BUCKETS),
         .BUCKET_AW(BUCKET_AW),
@@ -563,25 +565,49 @@ module hash_bucket_table #(
         .clk            (clk),
         .rst_n          (rst_n),
         .main_write_en  (did_write),
-        .main_write_addr(main_write_addr_bucket),
+        .main_write_addr(shared_write_addr_bucket),
         .s1_valid       (s1_valid),
         .s1_free_found  (free_found),
 
-        .kill_valid(did_write_expired),
+        .kill_valid(kill_write),
         .kill_addr (shared_write_addr),
 
         .debug_addr        (),
         .debug_load        (),
-        .total_full_buckets(total_full_buckets),
-        .total_load        (total_load)
+        .total_full_buckets(),
+        .total_load        ()
     );
 
+    reg [15:0] test_temp_0;
+    reg [15:0] test_temp_1;
+    reg [31:0] cycle_count = 0;
     always @(posedge clk) begin
         // 3. 设置触发条件：比如每当有一个有效的写操作时记录
         if (did_write) begin
             // %0t: 时间, %d: 十进制, %h: 十六进制
             // 这里的信号名要换成你模块里实际的信号
-            $fwrite(fp, "%d, %d, %d, %d\n", s1_x, s1_y, out_idx, total_load);
+            // $fwrite(fp, "%d, %d, %d, %d\n", global_timer, debug_s1_x, debug_s1_y, out_idx);
+            $fwrite(fp, "%d, %d, %d\n", debug_s1_x, debug_s1_y, out_idx);
+        end
+
+        if (kill_valid) begin
+            // $fwrite(fp, "KILL, global_timer: %d, addr: %d, ts_reg: %d, r_pn: %d\n", global_timer, kill_addr, test_temp_0, test_temp_1);
+            cycle_count <= cycle_count + 1;
+        end
+    end
+
+    always @(posedge clk) begin
+        if (u_hash_expire_manager.expired) begin
+            test_temp_0 <= u_hash_expire_manager.ts_reg;
+            test_temp_1 <= u_hash_expire_manager.r_pn;
+        end
+    end
+
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            delay_kill_write <= 1'b0;
+        end else begin
+            delay_kill_write <= kill_write;
         end
     end
 

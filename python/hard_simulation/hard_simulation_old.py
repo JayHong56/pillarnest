@@ -1,11 +1,11 @@
 from __future__ import annotations
 from dataclasses import dataclass
-from typing import List, Optional, Tuple, Dict
+from typing import List, Tuple
 import pandas as pd
 from collections import deque
 
 # -----------------------------
-# 常量：与 Verilog 对齐
+# 常量定义
 # -----------------------------
 ST_EMPTY = 0b00
 ST_OCCU  = 0b01
@@ -15,70 +15,84 @@ COORD_WIDTH = 11
 VN_WIDTH = 5
 TIMER_WIDTH = 16
 
-BUCKETS = 64
-SLOTS_PER_BUCKET = 4
-ADDR_WIDTH = 8          # 0..255 = {bucket[5:0], slot[1:0]}
-TABLE_SIZE = 256
-LIFE_CYCLE = 100        # 与参数一致
+# 4-Choice 架构配置
+NUM_TABLES = 4         # 对应 4 个 Seed
+BUCKETS_PER_TABLE = 64 # 对应 BUCKET_AW = 6
+TOTAL_CAPACITY = NUM_TABLES * BUCKETS_PER_TABLE # 256
+ADDR_WIDTH = 8         # 2 bits Table ID + 6 bits Bucket ID
+
+LIFE_CYCLE = 100
 
 # -----------------------------
-# 工具：截断到固定位宽（模拟硬件寄存器）
+# 工具函数
 # -----------------------------
 def mask_u(val: int, width: int) -> int:
     return val & ((1 << width) - 1)
 
 def sign_extend(val: int, width: int) -> int:
-    """把 Python int 按 width 当作有符号数解释（模拟 signed [W-1:0]）"""
     val = mask_u(val, width)
     sign = 1 << (width - 1)
     return val - (1 << width) if (val & sign) else val
 
 # -----------------------------
-# 哈希函数：输出 bucket_id (0..63)
-# 说明：你 RTL 用 hash_func_multiplicative 模块。
-# 这里提供一个可替换实现；如果你给出 RTL 具体公式，我可以 1:1 对齐。
+# 哈希函数 (对齐 Verilog 4-Choice)
 # -----------------------------
-def hash_bucket_id_rtl(key_x: int, key_y: int) -> int:
-    """
+def hash_bucket_id_rtl(key_x: int, key_y: int, seed: int) -> int:
+    """ 
     Python 仿真版 hash_func_multiplicative
-    与 RTL 位级一致
+    支持 SEED 参数 (0, 1, 2, 3)
     """
-
     COORD_WIDTH = 11
     BUCKET_AW = 6
-
     PRIME_X = 10368889
     PRIME_Y = 10000169
 
-    # ---------- 1. 模拟 signed [10:0] ----------
-    def signed(val, width):
-        mask = (1 << width) - 1
-        val &= mask
-        if val & (1 << (width - 1)):
-            val -= (1 << width)
-        return val
- 
-    x = signed(key_x, COORD_WIDTH)
-    y = signed(key_y, COORD_WIDTH)
+    # 1. 输入扰动 (Input Perturbation)
+    # 模拟 signed [10:0] 运算
+    x = sign_extend(key_x, COORD_WIDTH)
+    y = sign_extend(key_y, COORD_WIDTH)
+    
+    mod_x = x
+    mod_y = y
 
-    # ---------- 2. signed 乘法，截断为 36-bit ----------
-    mult_x = x * PRIME_X
-    mult_y = y * PRIME_Y
+    if seed == 0:
+        pass # 原始
+    elif seed == 1:
+        mod_x = ~x # 取反
+    elif seed == 2:
+        mod_y = ~y # 取反
+    elif seed == 3:
+        # 异或 8'h5A / 8'hA5
+        # 注意：Verilog 中 8'h5A 会被符号扩展还是零扩展取决于具体写法，
+        # 通常 x ^ 8'h5A 会将 0x5A 视为同位宽整数。
+        # 这里假设 Verilog: mod_x = key_x ^ 'h5A (低8位异或)
+        mod_x = x ^ 0x5A
+        mod_y = y ^ 0xA5
+    
+    # 再次确保位宽 (模拟寄存器截断)
+    mod_x = sign_extend(mod_x, COORD_WIDTH)
+    mod_y = sign_extend(mod_y, COORD_WIDTH)
 
-    # Verilog: wire signed [35:0]
+    # 2. 乘法核心
+    mult_x = mod_x * PRIME_X
+    mult_y = mod_y * PRIME_Y
+
+    # 截断为 36-bit
     mult_x &= (1 << 36) - 1
     mult_y &= (1 << 36) - 1
 
-    # ---------- 3. XOR 混合 ----------
+    # 3. 混合
     mixed = mult_x ^ mult_y
-    mixed &= (1 << 36) - 1  # 明确 36-bit
+    mixed &= (1 << 36) - 1
 
-    # ---------- 4. 取 mixed[24:19] ----------
+    # 4. 输出高位 (mixed[24:19])
     hash_out = (mixed >> 19) & ((1 << BUCKET_AW) - 1)
+    # print(f"hash_out={hash_out:02x}, mixed={mixed:09x} (mult_x={mult_x:09x}, mult_y={mult_y:09x})")
 
     return hash_out
+
 # -----------------------------
-# 表项结构（对应 ENTRY = {st, kx, ky, pn, ts}）
+# 表项结构
 # -----------------------------
 @dataclass
 class Entry:
@@ -86,7 +100,7 @@ class Entry:
     kx: int = 0
     ky: int = 0
     pn: int = 0
-    ts: int = 0  # last_access_time / timestamp
+    ts: int = 0
 
     def is_free_or_tomb(self) -> bool:
         return self.st in (ST_EMPTY, ST_TOMB)
@@ -94,119 +108,95 @@ class Entry:
     def is_occu_and_match(self, x: int, y: int) -> bool:
         return self.st == ST_OCCU and self.kx == x and self.ky == y
 
-
+# -----------------------------
+# 过期管理器
+# -----------------------------
 class ExpireManagerRTL:
-    """
-    软件版 hash_expire_manager：
-    - DQ 深度 = LIFE_CYCLE
-    - 每次 write_commit 推入 write_addr
-    - DQ 满后，每次 commit 弹出一个 cand_addr，做 shadow 读 + expired 判断
-    - expired -> 写 TOMB + 产生 expire 事件
-    """
     def __init__(self, life_cycle: int):
         self.life_cycle = int(life_cycle)
-        self.dq = deque()  # 存放 write_addr，最大长度 = LIFE_CYCLE
-        self.expired_events = []  # (kx, ky, addr, pn)
+        self.dq = deque()
+        self.expired_events = []
 
-    def on_write_commit(self, time_now: int, write_addr: int, table: list[list[Entry]]):
+    def on_write_commit(self, time_now: int, write_addr: int, tables: List[List[Entry]]):
         """
-        对应 RTL 的 write_commit=1 时钟行为（功能级，不做两拍流水延迟）。
-        table: table[bucket][slot]
-        write_addr: 0..255 ({bucket[5:0], slot[1:0]})
+        tables: 4个 list，每个 list 是 buckets
+        write_addr: 8-bit {table_id[1:0], bucket_id[5:0]}
         """
         # push
         if len(self.dq) < self.life_cycle:
             self.dq.append(write_addr)
-            return  # DQ 未满，不产生 cand
+            return
 
-        # DQ 已满：pop cand，再 push 新的（与环形队列 steady-state 等价）
+        # pop cand
         cand_addr = self.dq.popleft()
         self.dq.append(write_addr)
 
+        # Decode address
+        table_id = cand_addr & 0x3
+        bucket_id = (cand_addr & 0xFC) >> 2
+        
+        e = tables[table_id][bucket_id]
 
-        # shadow read（软件直接读当前表项，相当于 rdata_shadow）
-        bucket = (cand_addr >> 2) & 0x3F
-        slot   = cand_addr & 0x3
-        e = table[bucket][slot]
-
-        # expired 判断： (OCCU) && ((time_now - ts) > LIFE_CYCLE)
-        dt = (time_now - e.ts) & ((1 << TIMER_WIDTH) - 1)  # 16-bit wrap
-        # print(f"ExpireManagerRTL: Check cand_addr={cand_addr} st={e.st} time_now={time_now} entry_ts={e.ts} dt={dt}")
-        if e.st == ST_OCCU and dt > self.life_cycle:
-            # print(f"ExpireManagerRTL: Expire entry at addr={cand_addr} time_now={time_now} entry_ts={e.ts} dt={dt}")
-            # 产生过期事件（对应 fifo_in_data）
+        # expired 判断
+        dt = (time_now - e.ts) & ((1 << TIMER_WIDTH) - 1)
+        if e.st == ST_OCCU and dt >= self.life_cycle:
+            # 产生过期事件
             self.expired_events.append((e.kx, e.ky, cand_addr, e.pn))
-            # 写 tomb（b_we/b_addr/b_wdata）
-            table[bucket][slot] = Entry(st=ST_TOMB, kx=0, ky=0, pn=0, ts=0)
-
-    def pop_events(self):
-        ev = self.expired_events[:]
-        self.expired_events.clear()
-        return ev
-
+            # print(f"Expire Event: Point=({e.kx}, {e.ky}), Addr={cand_addr}, PN={e.pn}, Time={time_now}, DT={dt}")
+            # 写 tomb
+            tables[table_id][bucket_id] = Entry(st=ST_TOMB, kx=0, ky=0, pn=0, ts=0)
 
 # -----------------------------
-# 仿真器主体
+# 4-Choice 仿真器主体
 # -----------------------------
 class HashBucketTableSim:
-    def __init__(
-        self,
-        buckets: int = BUCKETS,
-        slots_per_bucket: int = SLOTS_PER_BUCKET,
-        life_cycle: int = LIFE_CYCLE
-    ):
-        self.buckets = buckets
-        self.slots_per_bucket = slots_per_bucket
+    def __init__(self, life_cycle: int = LIFE_CYCLE):
         self.life_cycle = life_cycle
-        self.expire_mgr = ExpireManagerRTL(LIFE_CYCLE)
+        self.expire_mgr = ExpireManagerRTL(life_cycle)
 
-        # table[bucket][slot] = Entry
-        self.table: List[List[Entry]] = [
-            [Entry() for _ in range(slots_per_bucket)]
-            for _ in range(buckets)
+        # 4 个表，每个表 64 个 Bucket
+        self.tables: List[List[Entry]] = [
+            [Entry() for _ in range(BUCKETS_PER_TABLE)]
+            for _ in range(NUM_TABLES)
         ]
 
-        # RTL: global_timer 只在 did_write 时 +1
         self.global_timer: int = 0
+        
+        # 【新增】模拟 Verilog 的 Round-Robin 指针 (2-bit)
+        self.rr_ptr: int = 0 
 
-        # 记录过期输出（模拟 m_axis_expire_tdata）
-        # (kx, ky, out_idx, pn)
-        self.expired_events: List[Tuple[int, int, int, int]] = []
-
-    def _pack_out_idx(self, bucket_id: int, slot: int) -> int:
-        # out_idx = {bucket[5:0], slot[1:0]}  -> 8-bit
-        return ((bucket_id & 0x3F) << 2) | (slot & 0x3)
+    def _pack_out_idx(self, table_id: int, bucket_id: int) -> int:
+        return ((bucket_id & 0x3F) << 2) | (table_id & 0x3)
 
     def _is_expired(self, e: Entry) -> bool:
         if e.st != ST_OCCU:
             return False
-        # 注意：RTL expire_manager 以 global_timer 为 time_now
         return (self.global_timer - e.ts) > self.life_cycle
 
     def get_bram_loads(self):
-        """
-        返回 4 块 BRAM 的负载（每块是一个 slot 平面）
-        统计口径：ST_OCCU 且未过期
-        """
-        loads = [0] * self.slots_per_bucket  # 4
-
-        for b in range(self.buckets):
-            for s in range(self.slots_per_bucket):
-                e = self.table[b][s]
+        loads = [0] * NUM_TABLES
+        for t in range(NUM_TABLES):
+            for b in range(BUCKETS_PER_TABLE):
+                e = self.tables[t][b]
                 if e.st == ST_OCCU and (not self._is_expired(e)):
-                    loads[s] += 1
-
-        capacity_each = self.buckets  # 每块 BRAM 深度=BUCKETS=64
+                    loads[t] += 1
+        
+        capacity_each = BUCKETS_PER_TABLE
         pct = [100.0 * x / capacity_each for x in loads]
         return loads, pct
     
     def process(self, key_x: int, key_y: int):
-        # 模拟 signed 位宽输入
+        # 1. 坐标符号扩展
         x = sign_extend(key_x, COORD_WIDTH)
         y = sign_extend(key_y, COORD_WIDTH)
 
-        start_bucket = hash_bucket_id_rtl(x, y)
-        time_now = self.global_timer  # 对齐 RTL：更新前的 global_timer
+        time_now = self.global_timer
+
+        # 2. 并行计算 4 个哈希值
+        hashes = [hash_bucket_id_rtl(x, y, seed=i) for i in range(NUM_TABLES)]
+        
+        # 3. 并行读取
+        entries = [self.tables[i][h] for i, h in enumerate(hashes)]
 
         busy = True
         found = False
@@ -215,124 +205,126 @@ class HashBucketTableSim:
         out_pn = 0
         did_write = False
 
-        # ---------
-        # 线性探测：从 start_bucket 开始，最多探测 BUCKETS 次
-        # ---------
-        for probe in range(self.buckets):
-            bucket_id = (start_bucket + probe) % self.buckets
-            slots = self.table[bucket_id]
+        hit_idx = -1
+        free_idx = -1
 
-            hit = False
-            hit_way = 0
-            free_found = False
-            free_way = 0
+        # ---------------------------------------------------------
+        # 4. 检查 HIT (优先级最高，不受 RR 影响)
+        # ---------------------------------------------------------
+        if self.global_timer == 4815:
+            breakpoint()
 
-            # 先在当前 bucket 里扫 4 个 slot
-            for i in range(self.slots_per_bucket):
-                if (not hit) and slots[i].is_occu_and_match(x, y):
-                    hit = True
-                    hit_way = i
-                if (not free_found) and slots[i].is_free_or_tomb():
-                    free_found = True
-                    free_way = i
-
-            # 命中：更新 pn
-            if hit:
-                found = True
-                out_idx = self._pack_out_idx(bucket_id, hit_way)
-                new_pn = mask_u(slots[hit_way].pn + 1, VN_WIDTH)
-                out_pn = new_pn
-                slots[hit_way] = Entry(
-                    st=ST_OCCU, kx=x, ky=y,
-                    pn=new_pn,
-                    ts=mask_u(time_now, TIMER_WIDTH)
-                )
-                did_write = True
-                break
-
-            # 未命中但有空位：插入
-            if free_found:
-                found = True
-                out_idx = self._pack_out_idx(bucket_id, free_way)
-                out_pn = 1
-                slots[free_way] = Entry(
-                    st=ST_OCCU, kx=x, ky=y,
-                    pn=1,
-                    ts=mask_u(time_now, TIMER_WIDTH)
-                )
-                did_write = True
-                break
-
-            # 当前 bucket 满且无命中：继续 probe 下一个 bucket
-
+        for i in range(NUM_TABLES):
+            if entries[i].is_occu_and_match(x, y):
+                hit_idx = i
+                break 
         
-        # probe 一圈还没写入/命中：表满
-        if not did_write:
-            table_full = True
-            print(f"Table FULL at key=({x},{y}) time={time_now}")
-            loads, pct = sim.get_bram_loads()
-            print(f"pt={i} timer={sim.global_timer} loads={loads} pct={[round(x,1) for x in pct]}")
+        # ---------------------------------------------------------
+        # 5. 检查 INSERT (受 RR 指针控制)
+        # ---------------------------------------------------------
+        if hit_idx == -1:
+            # 【核心修改】根据 rr_ptr 生成查找顺序
+            # 比如 rr_ptr=1 -> check_order=[1, 2, 3, 0]
+            check_order = [(self.rr_ptr + i) % NUM_TABLES for i in range(NUM_TABLES)]
+            
+            for i in check_order:
+                e = entries[i]
+                # 检查是否为空位 (Empty/Tomb) 或已过期
+                if e.is_free_or_tomb() or self._is_expired(e):
+                    free_idx = i
+                    # print(f"Free slot found at table {i} (rr_ptr={self.rr_ptr})")
+                    # 【核心修改】模拟 Verilog: rr_ptr <= rr_ptr + 1
+                    # 只有在发生 Free Insert 时才更新指针
+                    self.rr_ptr = (self.rr_ptr + 1) % NUM_TABLES
+                    break
+        
+        # 6. 执行写入/更新
+        target_table = -1
+        target_bucket = -1
 
-        # 写提交：驱动 expire manager + timer 自增
+        if hit_idx != -1:
+            # HIT: Update (不更新 rr_ptr)
+            found = True
+            target_table = hit_idx
+            target_bucket = hashes[hit_idx]
+            old_e = self.tables[target_table][target_bucket]
+            
+            new_pn = mask_u(old_e.pn + 1, VN_WIDTH)
+            out_pn = new_pn
+            out_idx = self._pack_out_idx(target_table, target_bucket)
+            
+            self.tables[target_table][target_bucket] = Entry(
+                st=ST_OCCU, kx=x, ky=y, pn=new_pn, ts=mask_u(time_now, TIMER_WIDTH)
+            )
+            did_write = True
+
+        elif free_idx != -1:
+            # MISS but Free: Insert (rr_ptr 已在上面更新)
+            found = True
+            target_table = free_idx
+            target_bucket = hashes[free_idx]
+            
+            out_pn = 1
+            out_idx = self._pack_out_idx(target_table, target_bucket)
+            # print(f"Inserting at table {target_table}, bucket {target_bucket} out_idx={out_idx} (rr_ptr={self.rr_ptr})")
+            
+            self.tables[target_table][target_bucket] = Entry(
+                st=ST_OCCU, kx=x, ky=y, pn=1, ts=mask_u(time_now, TIMER_WIDTH)
+            )
+            did_write = True
+        
+        else:
+            # Full
+            table_full = True
+
+        # 7. 写提交 & 全局计时
         if did_write:
-            # print(x, y, out_idx)
-            self.expire_mgr.on_write_commit(time_now=time_now, write_addr=out_idx, table=self.table)
+            self.expire_mgr.on_write_commit(time_now, out_idx, self.tables)
             self.global_timer = mask_u(self.global_timer + 1, TIMER_WIDTH)
+            print(x, y, out_idx)
 
         return {
             "busy": busy,
             "found": found,
             "out_idx": out_idx,
             "out_point_number": out_pn,
-            "table_full": table_full,
-            "bucket_id": start_bucket,       # 原始 hash bucket（起点）
-            "probe_steps": probe if did_write else self.buckets,  # 线性探测步数
+            "table_full": table_full
         }
-
-
-    def dump_bucket(self, bucket_id: int) -> List[Entry]:
-        return list(self.table[bucket_id])
-
-    def pop_expired_events(self) -> List[Tuple[int, int, int, int]]:
-        """取走并清空过期事件队列（模拟 AXI-stream 消费）"""
-        ev = self.expired_events[:]
-        self.expired_events.clear()
-        return ev
-
 # -----------------------------
-# 示例：简单跑几条
+# 主程序示例
 # -----------------------------
 if __name__ == "__main__":
-    import pandas as pd
+    # 请确保目录下有该文件，或修改为你的 CSV 路径
+    CSV_FILE = r"E:\verilog\pillarnest\modelsim_pre\ssimulation_result.csv"
     REPORT_INTERVAL = 500
 
-    CSV_FILE = "ssimulation_result.csv"   # ← 改成你的 csv 文件名
-    sim = HashBucketTableSim()
-
-    df = pd.read_csv(CSV_FILE)
-    df.columns = df.columns.str.strip()   # 防止列名有空格
-
-    # 确认列名：需要 Key_X, Key_Y（你之前文件里就是这两个）
-    if "Key_X" not in df.columns or "Key_Y" not in df.columns:
-        raise ValueError(f"CSV 列名不对：{df.columns.tolist()}，需要 Key_X, Key_Y")
-
-    cnt = 0
-    for i, row in enumerate(df.itertuples(index=False), start=1):
-        kx = int(getattr(row, "Key_X"))
-        ky = int(getattr(row, "Key_Y"))
-        sim.process(kx, ky)
-        cnt += 1
-        # 你想输出什么都行，这里给个对齐 RTL 的关键输出
-        # out_idx 对应 {bucket, slot}，out_point_number 对应 pn
-        # if r["found"]:
-        #     print(f"k=({kx},{ky}) bucket={r['bucket_id']} out_idx={r['out_idx']} pn={r['out_point_number']} full={r['table_full']}")
+    try:
+        df = pd.read_csv(CSV_FILE)
+        df.columns = df.columns.str.strip()
+        if "Key_X" not in df.columns or "Key_Y" not in df.columns:
+            raise ValueError("CSV 缺少 Key_X 或 Key_Y 列")
         
-        if i % REPORT_INTERVAL == 0:
-            loads, pct = sim.get_bram_loads()
-            print(f"pt={i} timer={sim.global_timer} loads={loads} pct={[round(x,1) for x in pct]}")
+        sim = HashBucketTableSim()
+        print(f"开始仿真: 4-Choice Hashing, Total Capacity={TOTAL_CAPACITY}")
 
-    print(f"总共处理点数：{cnt}")
-# # 如果你还想看过期事件（模拟 m_axis_expire_tdata）
-# expired = sim.pop_expired_events()
-# print(f"expired_events={len(expired)}")
+        cnt = 0
+        collisions = 0
+        for i, row in enumerate(df.itertuples(index=False), start=1):
+            kx = int(getattr(row, "Key_X"))
+            ky = int(getattr(row, "Key_Y"))
+            
+            res = sim.process(kx, ky)
+            
+            if res["table_full"]:
+                collisions += 1
+            
+            cnt += 1
+            
+            if i % REPORT_INTERVAL == 0:
+                loads, pct = sim.get_bram_loads()
+                # print(f"Points={i} Timer={sim.global_timer} | Loads={loads} Pct={[round(x,1) for x in pct]}% | Collisions={collisions}")
 
+        print(f"仿真结束。总点数: {cnt}, 总冲突数: {collisions}, 冲突率: {collisions/cnt*100:.2f}%")
+
+    except FileNotFoundError:
+        print(f"错误: 找不到文件 {CSV_FILE}。请先生成数据文件。")
