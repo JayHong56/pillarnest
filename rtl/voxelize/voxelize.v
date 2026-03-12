@@ -8,8 +8,10 @@ module voxelize #(
     parameter integer BRAM_DATA_WIDTH = 256,  // 64bit * 4points
     parameter integer BRAM_ADDR_WIDTH = 10    // 128pillar * 5brams
 ) (
-    input wire clk,
-    input wire rst_n
+    input  wire clk_p,
+    input  wire clk_n,
+    input  wire rst_n,
+    output wire m_axis_end_data_bit
 );
     reg                            dram_read_en = 1'b1;
     reg                            dram_write_en = 1'b0;
@@ -21,8 +23,8 @@ module voxelize #(
         .ADDR_WIDTH     (DRAM_ADDR_WIDTH),                                                   // 65536 depth
         .MEM_FILE       ("E:\\verilog\\pillarnest\\rtl\\.pointcloud\\points_bits_128.txt"),
         .MEM_FILE_LENGTH(34752)
-    ) pointcloud_dram (
-        .clk          (clk),
+    ) u_pointcloud_dram (
+        .clk          (clk_p),
         .rst_n        (rst_n),
         .en           (dram_read_en),
         .we           (dram_write_en),
@@ -33,41 +35,41 @@ module voxelize #(
     );
 
 
-    wire S_AXIS_DRAM_TLAST;
-    wire [AXIS_DATA_WIDTH-1:0] S_AXIS_DRAM_TDATA;
-    wire S_AXIS_DRAM_TVALID;
-    wire S_AXIS_DRAM_TREADY;
+    wire m_axis_dram_last;
+    wire [AXIS_DATA_WIDTH-1:0] m_axis_dram_data;
+    wire m_axis_dram_valid;
+    wire m_axis_dram_ready;
     // axi stream 读fifo
-    fifo_ram_2_axi_stream #(
+    adapter_ram_2_axi_stream #(
         .AXIS_DATA_WIDTH  (AXIS_DATA_WIDTH),
         .BRAM_DEPTH       (AXIS_ADDR_WIDTH),
         .AXIS_STROBE_WIDTH(AXIS_DATA_WIDTH / 8),
         .USE_KEEP         (0),
         .USER_DEPTH       (1)
-    ) fifo_DRAM_2_axi_stream (
-        .clk  (clk),
-        .rst_n(rst_n),
+    ) u_adapter_ram_2_axi_stream (
+        .clk              (clk_p),
+        .rst_n            (rst_n),
         //Ping Poing FIFO Read Interface
-        .i_axis_user (),
-        .i_bram_en   (dram_read_en),
-        .i_bram_size (dram_write_size),
-        .o_bram_addr (dram_read_address),
-        .i_bram_data (dram_data_out),
+        .i_axis_user      (),
+        .i_bram_en        (dram_read_en),
+        .i_bram_size      (dram_write_size),
+        .o_bram_addr      (dram_read_address),
+        .i_bram_data      (dram_data_out),
         //AXI Stream Output
-        .o_axis_user (),
-        .i_axis_ready(S_AXIS_DRAM_TREADY),
-        .o_axis_data (S_AXIS_DRAM_TDATA),
-        .o_axis_last (S_AXIS_DRAM_TLAST),
-        .o_axis_valid(S_AXIS_DRAM_TVALID)
+        .m_axis_dram_user (),
+        .m_axis_dram_ready(m_axis_dram_ready),
+        .m_axis_dram_data (m_axis_dram_data),
+        .m_axis_dram_last (m_axis_dram_last),
+        .m_axis_dram_valid(m_axis_dram_valid)
     );
 
 
     localparam COORD_WIDTH = 11;
     localparam PT_WIDTH = 16;
     localparam VN_WIDTH = 5;
-    localparam ENPAND_PT_DIM = 11;  // x,y,z,intensity,0,(x-mean,y-mean,z-mean,intensity-mean),(x-vmean,y-vmean,z-vmean,intensity-vmean)
+    localparam EXPAND_PT_DIM = 11;  // x,y,z,intensity,0,(x-mean,y-mean,z-mean,intensity-mean),(x-vmean,y-vmean,z-vmean,intensity-vmean)
+    localparam OUT_PT_DIM = 48;
     localparam MAX_VOXEL_NUM = 12'd20;
-
     localparam HASH_TABLE_SIZE = 256;
     localparam HASH_ADDR_WIDTH = $clog2(HASH_TABLE_SIZE);  // log2(HASH_TABLE_SIZE)
     localparam [15:0] THRESHOLD_CLOSE = 16'h0100;  // 1.00m
@@ -98,21 +100,20 @@ module voxelize #(
         .PRE_LAT                 (PRE_LAT),
         .LIFE_CYCLE              (LIFE_CYCLE)
     ) voxel_coordinate_inst (
-        .clk               (clk),
-        .rst_n             (rst_n),
+        .clk                 (clk_p),
+        .rst_n               (rst_n),
         // AXI Stream Slave (Input)
-        .S_AXIS_DRAM_TDATA (S_AXIS_DRAM_TDATA),
-        .S_AXIS_DRAM_TKEEP (),
-        .S_AXIS_DRAM_TLAST (S_AXIS_DRAM_TLAST),
-        .S_AXIS_DRAM_TVALID(S_AXIS_DRAM_TVALID),
-        .S_AXIS_DRAM_TREADY(S_AXIS_DRAM_TREADY),
-
-        .bram_clk            (bram_clk_a),
-        .bram_rst            (),
-        .bram_wr             (bram_wr_a),
-        .bram_bwen           (bram_bwen_a),
-        .bram_addr           (bram_addr_a),
-        .bram_wrdata         (bram_wrdata_a),
+        .s_axis_dram_data    (m_axis_dram_data),
+        .s_axis_dram_keep    (),
+        .s_axis_dram_last    (m_axis_dram_last),
+        .s_axis_dram_valid   (m_axis_dram_valid),
+        .s_axis_dram_ready   (m_axis_dram_ready),
+        .bram_clk            (bram_clk_a),            // only read
+        .bram_rst            (),                      // only read
+        .bram_wr             (bram_wr_a),             // only read
+        .bram_bwen           (bram_bwen_a),           // only read
+        .bram_addr           (bram_addr_a),           // only read
+        .bram_wrdata         (bram_wrdata_a),         // only read
         .m_axis_expire_tdata (m_axis_expire_tdata),
         .m_axis_expire_tvalid(m_axis_expire_tvalid),
         .m_axis_expire_tready(m_axis_expire_tready)
@@ -123,26 +124,57 @@ module voxelize #(
     wire [BRAM_ADDR_WIDTH-1:0] bram_addr_b;
     wire bram_en_b;
     wire [BRAM_DATA_WIDTH-1:0] bram_rdata_b;
-    pfn #(
+
+    wire m_axis_pfe_valid;
+    wire [EXPAND_PT_DIM*PT_WIDTH-1:0] m_axis_pfe_data;
+    wire m_axis_pfe_last;
+    pfe #(
         .COORD_WIDTH    (COORD_WIDTH),
         .PT_WIDTH       (PT_WIDTH),
         .HASH_ADDR_WIDTH(HASH_ADDR_WIDTH),
         .MAX_VOXEL_NUM  (MAX_VOXEL_NUM),
         .VN_WIDTH       (VN_WIDTH),
-        .ENPAND_PT_DIM  (ENPAND_PT_DIM),
+        .EXPAND_PT_DIM  (EXPAND_PT_DIM),
         .BRAM_DATA_WIDTH(BRAM_DATA_WIDTH),
         .BRAM_ADDR_WIDTH(BRAM_ADDR_WIDTH)
-    ) u_pfn (
-        .clk                 (clk),
+    ) u_pfe (
+        .clk                 (clk_p),
         .rst_n               (rst_n),
         .s_axis_expire_tvalid(m_axis_expire_tvalid),
         .s_axis_expire_tready(m_axis_expire_tready),
         .s_axis_expire_tdata (m_axis_expire_tdata),
-        .bram_clk            (bram_clk_b),
-        .bram_rst            (bram_rst_b),
-        .bram_addr           (bram_addr_b),
-        .bram_en             (bram_en_b),
-        .bram_rdata          (bram_rdata_b)
+        .bram_clk_b          (bram_clk_b),
+        .bram_rst_b          (bram_rst_b),
+        .bram_addr_b         (bram_addr_b),
+        .bram_en_b           (bram_en_b),
+        .bram_rdata_b        (bram_rdata_b),
+        .m_axis_pfe_valid    (m_axis_pfe_valid),
+        .m_axis_pfe_data     (m_axis_pfe_data),
+        .m_axis_pfe_last     (m_axis_pfe_last)
+    );
+
+    localparam WEIGHT_WIDTH = 16;
+    localparam ACC_WIDTH = 32;
+    // wire [PT_WIDTH*OUT_PT_DIM-1:0] m_axis_end_data;
+    // assign m_axis_end_data_part = m_axis_end_data[16-1:0];
+    pfn_layer #(
+        .EXPAND_PT_DIM  (EXPAND_PT_DIM),
+        .OUT_PT_DIM     (OUT_PT_DIM),
+        .PT_WIDTH       (PT_WIDTH),
+        .MEM_WEIGHT_FILE("E:\\mmdetection3d\\my_output_parameters\\weight.mem"),
+        .MEM_BIAS_FILE  ("E:\\mmdetection3d\\my_output_parameters\\bias.mem"),
+        .WEIGHT_WIDTH   (WEIGHT_WIDTH),
+        .ACC_WIDTH      (ACC_WIDTH)
+    ) u_pfn_layer (
+        .clk             (clk_p),
+        .rst_n           (rst_n),
+        // 从上一级模块接收单个点的接口
+        .s_axis_pfe_valid(m_axis_pfe_valid),
+        .s_axis_pfe_data (m_axis_pfe_data),
+        .s_axis_pfe_last (m_axis_pfe_last),
+        // 最终池化后的输出
+        .m_axis_out_valid(),
+        .m_axis_out_data_bit (m_axis_end_data_bit)
     );
 
     dualport_bram #(
@@ -150,7 +182,7 @@ module voxelize #(
         .ADDR_WIDTH     (BRAM_ADDR_WIDTH),
         .MEM_FILE       ("NOTHING"),
         .MEM_FILE_LENGTH()
-    ) voxelpoint_bram (
+    ) u_voxelpoint_bram (
         .a_clk (bram_clk_a),
         .a_wr  (bram_wr_a),
         .a_en  (1'b1),
@@ -158,11 +190,10 @@ module voxelize #(
         .a_addr(bram_addr_a),
         .a_din (bram_wrdata_a),
         .a_dout(bram_porta_out),
-
         .b_clk (bram_clk_b),
-        .b_wr  (1'b0),         // only read
+        .b_wr  (1'b0),            // only read
         .b_en  (bram_en_b),
-        .b_bwen(1'b0),         // only read
+        .b_bwen(1'b0),            // only read
         .b_addr(bram_addr_b),
         .b_din (bram_addr_b),
         .b_dout(bram_rdata_b)

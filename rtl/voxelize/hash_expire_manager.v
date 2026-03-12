@@ -41,9 +41,9 @@ module hash_expire_manager #(
     reg  [EW-1:0] fifo_in_data;
     wire          fifo_out_valid;
     wire [EW-1:0] fifo_out_data;
-    hash_expire_fifo_sync #(
+    hash_expire_fifo_sync #(  // fifo缓存expired事件等待PFN处理
         .WIDTH(EW),
-        .DEPTH(16)
+        .DEPTH(128)
     ) u_hash_expire_fifo_sync (
         .clk  (clk),
         .rst_n(rst_n),
@@ -53,13 +53,14 @@ module hash_expire_manager #(
         .in_data (fifo_in_data),
 
         .out_valid(fifo_out_valid),
-        .out_ready(1'b1),
+        .out_ready(fifo_out_ready),
         .out_data (fifo_out_data),
 
         .level()
     );
+    assign fifo_out_ready = m_axis_expire_tready;
     assign m_axis_expire_tvalid = fifo_out_valid;
-    assign m_axis_expire_tdata  = fifo_out_data;
+    assign m_axis_expire_tdata = fifo_out_data;
 
 
     localparam integer DQ_DEPTH = LIFE_CYCLE;

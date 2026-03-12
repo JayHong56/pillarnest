@@ -6,7 +6,7 @@ module hash_bucket_array_shadow #(
     input wire clk,
 
     // Port A
-    input  wire [BUCKET_AW-1:0]   a_addr,
+    input wire [BUCKET_AW-1:0] a_addr,
 
     input  wire                   we0_a,
     input  wire                   we1_a,
@@ -22,7 +22,7 @@ module hash_bucket_array_shadow #(
     output wire [ENTRY_WIDTH-1:0] rdata3_a,
 
     // Port B
-    input  wire [BUCKET_AW-1:0]   b_addr,
+    input  wire [  BUCKET_AW-1:0] b_addr,
     input  wire                   we0_b,
     input  wire                   we1_b,
     input  wire                   we2_b,

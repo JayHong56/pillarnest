@@ -6,29 +6,29 @@
 `timescale 1ps / 1ps
 
 module dualport_bram #(
-    parameter DATA_WIDTH = 256,
-    parameter ADDR_WIDTH = 10,
-    parameter MEM_FILE = "NOTHING",
+    parameter DATA_WIDTH      = 256,
+    parameter ADDR_WIDTH      = 10,
+    parameter MEM_FILE        = "NOTHING",
     parameter MEM_FILE_LENGTH = 0,
-    parameter NUM_BYTES = DATA_WIDTH / 8
+    parameter NUM_BYTES       = DATA_WIDTH / 8
 ) (
     // Port A
-    input wire a_clk,
-    input wire a_wr,  // write enable
-    input wire a_en,  // bram enable for port A
-    input wire [NUM_BYTES - 1:0] a_bwen,
-    input wire [ADDR_WIDTH - 1:0] a_addr,
-    input wire [DATA_WIDTH - 1:0] a_din,
-    output reg [DATA_WIDTH - 1:0] a_dout,
+    input  wire                    a_clk,
+    input  wire                    a_wr,    // write enable
+    input  wire                    a_en,    // bram enable for port A
+    input  wire [ NUM_BYTES - 1:0] a_bwen,
+    input  wire [ADDR_WIDTH - 1:0] a_addr,
+    input  wire [DATA_WIDTH - 1:0] a_din,
+    output reg  [DATA_WIDTH - 1:0] a_dout,
 
     // Port B
-    input wire b_clk,
-    input wire b_wr,  // write enable
-    input wire b_en,
-    input wire [NUM_BYTES - 1:0] b_bwen,
-    input wire [ADDR_WIDTH - 1:0] b_addr,
-    input wire [DATA_WIDTH - 1:0] b_din,
-    output reg [DATA_WIDTH - 1:0] b_dout
+    input  wire                    b_clk,
+    input  wire                    b_wr,    // write enable
+    input  wire                    b_en,
+    input  wire [ NUM_BYTES - 1:0] b_bwen,
+    input  wire [ADDR_WIDTH - 1:0] b_addr,
+    input  wire [DATA_WIDTH - 1:0] b_din,
+    output reg  [DATA_WIDTH - 1:0] b_dout
 );
 
     // Shared Memory

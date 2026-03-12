@@ -824,7 +824,7 @@ module fxp_sqrt_pipe #(
         end
     end
 
-    wire [WRI+WIF  :0] resushort = sign[WRI+WIF] ? (~resu[WRI+WIF][WRI+WIF:0])+ONER : resu[WRI+WIF][WRI+WIF:0];
+    wire [WRI+WIF : 0] resushort = sign[WRI+WIF] ? (~resu[WRI+WIF][WRI+WIF:0]) + ONER : resu[WRI+WIF][WRI+WIF:0];
     wire [WOI+WOF-1:0] outl;
     wire overflowl;
 

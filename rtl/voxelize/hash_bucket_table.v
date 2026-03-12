@@ -8,25 +8,22 @@ module hash_bucket_table #(
     parameter BUCKET_SLOT_WIDTH = 2,                                     // 4 slots per bucket
     parameter TABLE_SIZE        = BUCKETS * (1'b1 << BUCKET_SLOT_WIDTH)  // 256 slots
 ) (
-    input wire clk,
-    input wire rst_n,
-
-    input  wire                          req_valid,
-    output wire                          req_ready,
-    input  wire signed [COORD_WIDTH-1:0] key_x,
-    input  wire signed [COORD_WIDTH-1:0] key_y,
-
-    output reg                                          busy,
-    output reg                                          found,
-    output reg  [                       ADDR_WIDTH-1:0] out_idx,               // 0..255 = {bucket[5:0], way[1:0]}
-    output reg  [                         VN_WIDTH-1:0] out_point_number,
-    output reg                                          table_full,
+    input  wire                                                clk,
+    input  wire                                                rst_n,
+    input  wire                                                req_valid,
+    output wire                                                req_ready,
+    input  wire signed [                      COORD_WIDTH-1:0] key_x,
+    input  wire signed [                      COORD_WIDTH-1:0] key_y,
+    output reg                                                 busy,
+    output reg                                                 found,
+    output reg         [                       ADDR_WIDTH-1:0] out_idx,               // 0..255 = {bucket[5:0], way[1:0]}
+    output reg         [                         VN_WIDTH-1:0] out_point_number,
+    output reg                                                 table_full,
     // axi-stream 
-    output wire                                         m_axis_expire_tvalid,
-    input  wire                                         m_axis_expire_tready,
-    output wire [2*COORD_WIDTH+ADDR_WIDTH+VN_WIDTH-1:0] m_axis_expire_tdata    //22+7+5
+    output wire                                                m_axis_expire_tvalid,
+    input  wire                                                m_axis_expire_tready,
+    output wire        [2*COORD_WIDTH+ADDR_WIDTH+VN_WIDTH-1:0] m_axis_expire_tdata    //22+7+5
 );
-
     localparam ST_EMPTY = 2'b00;
     localparam ST_OCCU = 2'b01;
     localparam ST_TOMB = 2'b10;
@@ -42,7 +39,6 @@ module hash_bucket_table #(
     wire [BUCKET_SLOT_WIDTH-1:0] shared_write_addr_slot = we0_b ? 2'd0 : we1_b ? 2'd1 : we2_b ? 2'd2 : we3_b ? 2'd3 : 2'd0;
     wire [ADDR_WIDTH-1:0] shared_write_addr = {shared_write_addr_bucket, shared_write_addr_slot};
     wire [ENTRY_WIDTH-1:0] rdata0_a, rdata1_a, rdata2_a, rdata3_a;
-
     hash_bucket_array #(
         .ENTRY_WIDTH(ENTRY_WIDTH),
         .BUCKETS    (BUCKETS),
@@ -253,23 +249,19 @@ module hash_bucket_table #(
         .BUCKET_SLOT_WIDTH(BUCKET_SLOT_WIDTH),
         .ENTRY_WIDTH      (2 + COORD_WIDTH + COORD_WIDTH + VN_WIDTH + TIMER_WIDTH)
     ) u_hash_expire_manager (
-        .clk  (clk),
-        .rst_n(rst_n),
-
-        .write_commit(did_write),
-        .write_addr  (out_idx),      // 0-255
-        .time_now    (global_timer),
-
-        .a_addr_shadow (a_addr_shadow),
-        .a_we_shadow   (a_we_shadow),
-        .a_rdata_shadow(a_rdata_shadow),
-
-        .b_wdata     (kill_wdata),
-        .b_addr      (kill_addr_bucket),
-        .b_we        (kill_we_bucket),
-        .kill_valid  (kill_valid),
-        .kill_expired(kill_expired),
-
+        .clk                 (clk),
+        .rst_n               (rst_n),
+        .write_commit        (did_write),
+        .write_addr          (out_idx),               // 0-255
+        .time_now            (global_timer),
+        .a_addr_shadow       (a_addr_shadow),
+        .a_we_shadow         (a_we_shadow),
+        .a_rdata_shadow      (a_rdata_shadow),
+        .b_wdata             (kill_wdata),
+        .b_addr              (kill_addr_bucket),
+        .b_we                (kill_we_bucket),
+        .kill_valid          (kill_valid),
+        .kill_expired        (kill_expired),
         .m_axis_expire_tvalid(m_axis_expire_tvalid),
         .m_axis_expire_tready(m_axis_expire_tready),
         .m_axis_expire_tdata (m_axis_expire_tdata)
@@ -366,7 +358,6 @@ module hash_bucket_table #(
             end
         endcase
 
-        // 输出给后续写回逻辑用
         free_found = free_found_rr;
         free_way   = free_way_rr;
     end
@@ -390,6 +381,7 @@ module hash_bucket_table #(
 
         // 2. 写入表头 (可选)
         $fwrite(fp, "Key_X, Key_Y, Bucket_ID, Total_Load\n");
+        // $fwrite(fp, "")
     end
 
     // -------- actions for current s1 (combinational) --------
@@ -557,6 +549,7 @@ module hash_bucket_table #(
         end
     end
 
+`ifndef SYNTHESIS
     hash_load_monitor #(
         .BUCKETS  (BUCKETS),
         .BUCKET_AW(BUCKET_AW),
@@ -578,8 +571,10 @@ module hash_bucket_table #(
         .total_load        ()
     );
 
-    reg [15:0] test_temp_0;
-    reg [15:0] test_temp_1;
+    reg [15:0] delay_1cycle_temp_0;
+    reg [15:0] delay_1cycle_temp_1;
+    reg [COORD_WIDTH-1:0] delay_1cycle_temp_2;
+    reg [COORD_WIDTH-1:0] delay_1cycle_temp_3;
     reg [31:0] cycle_count = 0;
     always @(posedge clk) begin
         // 3. 设置触发条件：比如每当有一个有效的写操作时记录
@@ -591,15 +586,17 @@ module hash_bucket_table #(
         end
 
         if (kill_valid) begin
-            // $fwrite(fp, "KILL, global_timer: %d, addr: %d, ts_reg: %d, r_pn: %d\n", global_timer, kill_addr, test_temp_0, test_temp_1);
+            // $fwrite(fp, "KILL, global_timer: %d, addr: %d, ts_reg: %d, r_pn: %d, x: %d, y: %d\n", global_timer, kill_addr, delay_1cycle_temp_0, delay_1cycle_temp_1, delay_1cycle_temp_2, delay_1cycle_temp_3);
             cycle_count <= cycle_count + 1;
         end
     end
 
     always @(posedge clk) begin
         if (u_hash_expire_manager.expired) begin
-            test_temp_0 <= u_hash_expire_manager.ts_reg;
-            test_temp_1 <= u_hash_expire_manager.r_pn;
+            delay_1cycle_temp_0 <= u_hash_expire_manager.ts_reg;
+            delay_1cycle_temp_1 <= u_hash_expire_manager.r_pn;
+            delay_1cycle_temp_2 <= u_hash_expire_manager.r_key_x;
+            delay_1cycle_temp_3 <= u_hash_expire_manager.r_key_y;
         end
     end
 
@@ -610,5 +607,5 @@ module hash_bucket_table #(
             delay_kill_write <= kill_write;
         end
     end
-
+`endif
 endmodule

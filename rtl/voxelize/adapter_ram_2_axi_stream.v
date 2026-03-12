@@ -32,7 +32,7 @@ SOFTWARE.
 
 `timescale 1ps / 1ps
 
-module fifo_ram_2_axi_stream #(
+module adapter_ram_2_axi_stream #(
     parameter AXIS_DATA_WIDTH   = 128,
     parameter BRAM_DEPTH        = 12,
     parameter AXIS_STROBE_WIDTH = AXIS_DATA_WIDTH / 8,
@@ -51,11 +51,11 @@ module fifo_ram_2_axi_stream #(
     input      [AXIS_DATA_WIDTH - 1:0] i_bram_data,
 
     //AXI Stream Output
-    output [     USER_DEPTH - 1:0] o_axis_user,
-    input                          i_axis_ready,
-    output [AXIS_DATA_WIDTH - 1:0] o_axis_data,
-    output                         o_axis_last,
-    output                         o_axis_valid
+    output [     USER_DEPTH - 1:0] m_axis_dram_user,
+    input                          m_axis_dram_ready,
+    output [AXIS_DATA_WIDTH - 1:0] m_axis_dram_data,
+    output                         m_axis_dram_last,
+    output                         m_axis_dram_valid
 );
 
     //Functions
@@ -106,7 +106,7 @@ module fifo_ram_2_axi_stream #(
     //submodules
     //asynchronous logic
 
-    assign o_axis_user = i_axis_user;
+    assign m_axis_dram_user = i_axis_user;
     assign dempty = (dstart == dend);
     assign  dfull             = (dend == (1 << DECOUPLE_COUNT_SIZE) - 1) ?  (dstart == 0) : ((dend + 1) == dstart);
 
@@ -114,10 +114,10 @@ module fifo_ram_2_axi_stream #(
 
     assign  dlast             = (dstart == (1 << DECOUPLE_COUNT_SIZE) - 1) ? (dend   == 0) : ((dstart + 1) == dend);
 
-    assign  o_axis_last       = ((o_bram_addr > i_bram_size) || !i_bram_en) && dlast && (state == BRAM_FIN);
-    assign o_axis_valid = (!dempty && r_axis_enable);
-    assign w_axis_active = (o_axis_valid && i_axis_ready);
-    assign o_axis_data = dfifo[dstart];
+    assign  m_axis_dram_last       = ((o_bram_addr > i_bram_size) || !i_bram_en) && dlast && (state == BRAM_FIN);
+    assign m_axis_dram_valid = (!dempty && r_axis_enable);
+    assign w_axis_active = (m_axis_dram_valid && m_axis_dram_ready);
+    assign m_axis_dram_data = dfifo[dstart];
 
     //synchronous logic
     integer i;

@@ -1,7 +1,6 @@
 module voxel_coor_pipe #(
-    parameter integer BRAM_DATA_WIDTH = 256,  // 4 * 64
-    parameter integer BRAM_ADDR_WIDTH = 10,   // 128pillar * 5brams
-
+    parameter integer        BRAM_DATA_WIDTH          = 256,       // 4 * 64
+    parameter integer        BRAM_ADDR_WIDTH          = 10,        // 128pillar * 5brams
     parameter integer        AXIS_DATA_WIDTH          = 128,
     parameter integer        AXIS_ADDR_WIDTH          = 16,
     parameter integer        HASH_ADDR_WIDTH          = 8,         // log2(HASH_TABLE_SIZE)
@@ -16,24 +15,22 @@ module voxel_coor_pipe #(
     input wire rst_n,
 
     // AXI-Stream in (from DRAM FIFO)
-    input  wire [  AXIS_DATA_WIDTH-1:0] S_AXIS_DRAM_TDATA,
-    input  wire [AXIS_DATA_WIDTH/8-1:0] S_AXIS_DRAM_TKEEP,
-    input  wire                         S_AXIS_DRAM_TLAST,
-    input  wire                         S_AXIS_DRAM_TVALID,
-    output wire                         S_AXIS_DRAM_TREADY,
-
+    input  wire [  AXIS_DATA_WIDTH-1:0] s_axis_dram_data,
+    input  wire [AXIS_DATA_WIDTH/8-1:0] s_axis_dram_keep,
+    input  wire                         s_axis_dram_last,
+    input  wire                         s_axis_dram_valid,
+    output wire                         s_axis_dram_ready,
     // BRAM Native Interface
     output wire                         bram_clk,
     output wire                         bram_rst,
     output reg                          bram_wr,
-    output reg  [BRAM_DATA_WIDTH/8-1:0] bram_bwen,   // 32-bit Byte Enable
-    output reg  [  BRAM_ADDR_WIDTH-1:0] bram_addr,   // 10-bit Address
-    output wire [  BRAM_DATA_WIDTH-1:0] bram_wrdata, // 256-bit Data
-
+    output reg  [BRAM_DATA_WIDTH/8-1:0] bram_bwen,             // 32-bit Byte Enable
+    output reg  [  BRAM_ADDR_WIDTH-1:0] bram_addr,             // 10-bit Address
+    output wire [  BRAM_DATA_WIDTH-1:0] bram_wrdata,           // 256-bit Data
     // AXI-Stream out (expire voxel coordinates)
-    output wire              m_axis_expire_tvalid,
-    input  wire              m_axis_expire_tready,
-    output wire [22+7+5-1:0] m_axis_expire_tdata
+    output wire                         m_axis_expire_tvalid,
+    input  wire                         m_axis_expire_tready,
+    output wire [           22+7+5-1:0] m_axis_expire_tdata
 );
 
     localparam integer PT_WIDTH_I = 8;
@@ -56,9 +53,9 @@ module voxel_coor_pipe #(
     reg                           keep_point;
     reg  [PT_WIDTH_FLOAT32*4-1:0] point_raw_r;
     reg                           point_raw_vld;
-    wire                          s_fire = S_AXIS_DRAM_TVALID && S_AXIS_DRAM_TREADY;
+    wire                          s_fire = s_axis_dram_valid && s_axis_dram_ready;
     wire                          upstream_can_accept = !point_raw_vld || (!keep_point) || hash_fire;
-    assign S_AXIS_DRAM_TREADY = upstream_can_accept;
+    assign s_axis_dram_ready = upstream_can_accept;
 
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
@@ -66,7 +63,7 @@ module voxel_coor_pipe #(
             point_raw_vld <= 1'b0;
         end else begin
             if (s_fire) begin
-                point_raw_r   <= S_AXIS_DRAM_TDATA;
+                point_raw_r   <= s_axis_dram_data;
                 point_raw_vld <= 1'b1;
             end else if (upstream_can_accept) begin
                 // 没有新数据进来，但当前数据已经被处理（丢弃或发往下游），清空有效位
@@ -193,8 +190,8 @@ module voxel_coor_pipe #(
             keep_point <= 1'b0;
             // end else if (point_raw == 128'd0) begin // invaild data 
             //     keep_point <= 1'b0;
-        // end else if ((ABS_pt_x_fix16 <= THRESHOLD_CLOSE) && (ABS_pt_y_fix16 <= THRESHOLD_CLOSE)) begin
-        //     keep_point <= 1'b0;
+            // end else if ((ABS_pt_x_fix16 <= THRESHOLD_CLOSE) && (ABS_pt_y_fix16 <= THRESHOLD_CLOSE)) begin
+            //     keep_point <= 1'b0;
         end else if (ABS_pt_x_fix16 > THRESHOLD_BOUDARY || ABS_pt_y_fix16 > THRESHOLD_BOUDARY) begin
             keep_point <= 1'b0;
         end else if (ABS_pt_z_fix16[15] ? (ABS_pt_z_fix16 > THRESHOLD_BOUDARY_Z_LOW) :
@@ -229,19 +226,17 @@ module voxel_coor_pipe #(
         .BUCKETS          (64),
         .BUCKET_SLOT_WIDTH(2)
     ) u_hash_table_tombstone (
-        .clk      (clk),
-        .rst_n    (rst_n),
-        .req_ready(hash_req_ready),
-        .req_valid(hash_req_valid),
-        .key_x    (hash_key_x),
-        .key_y    (hash_key_y),
-
-        .busy            (hash_busy),
-        .found           (hash_found),
-        .out_idx         (hash_out_idx),
-        .out_point_number(hash_out_point_number),
-        .table_full      (hash_table_full),
-
+        .clk                 (clk),
+        .rst_n               (rst_n),
+        .req_ready           (hash_req_ready),
+        .req_valid           (hash_req_valid),
+        .key_x               (hash_key_x),
+        .key_y               (hash_key_y),
+        .busy                (hash_busy),
+        .found               (hash_found),
+        .out_idx             (hash_out_idx),
+        .out_point_number    (hash_out_point_number),
+        .table_full          (hash_table_full),
         .m_axis_expire_tready(m_axis_expire_tready),
         .m_axis_expire_tvalid(m_axis_expire_tvalid),
         .m_axis_expire_tdata (m_axis_expire_tdata)
@@ -288,10 +283,6 @@ module voxel_coor_pipe #(
         end
     endfunction
 
-    // ------------------------------------------------------------
-    // 8) 响应拍写 BRAM：hash_busy=1 表示 out_* 有效
-    // ------------------------------------------------------------
-
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             bram_wr   <= 1'b0;
@@ -313,15 +304,11 @@ module voxel_coor_pipe #(
             end
         end
     end
-// ============================================================
-    // 统计 Hash Table 阻塞周期
-    // ============================================================
-    
-    reg [31:0] stall_cnt; // 32位计数器，足够统计很长时间
-    
+
+`ifndef SYNTHESIS
+    reg [31:0] stall_cnt;  // 32位计数器，足够统计很长时间
     // 阻塞条件：有有效请求 (point_raw_vld && keep_point) 但 Hash 表未 Ready
     wire is_stalled = (point_raw_vld && keep_point) && (!hash_req_ready);
-
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             stall_cnt <= 32'd0;
@@ -331,8 +318,6 @@ module voxel_coor_pipe #(
             end
         end
     end
+`endif
 
-    // 如果你想把这个计数值输出到模块外部观测，可以添加一个 output 端口
-    // output wire [31:0] debug_stall_cnt
-    // assign debug_stall_cnt = stall_cnt;
 endmodule

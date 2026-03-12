@@ -7,7 +7,7 @@ module tb_voxelize;
 
     // DUT
     voxelize dut (
-        .clk  (clk),
+        .clk_p  (clk),
         .rst_n(rst_n)
     );
 
