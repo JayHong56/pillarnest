@@ -95,7 +95,6 @@ module pfe #(
             bram_addr_b <= 0;
         end else begin
             if (fire_in || req_phase != 0) begin
-                // Phase 0 锁存元数据
                 if (req_phase == 0) begin
                     st1_point_num  <= axis_point_num_indicator;
                     st1_voxel_x    <= axis_voxel_x;
@@ -104,7 +103,6 @@ module pfe #(
                 end
 
                 bram_en_b <= 1'b1;
-                // 每次按顺序读取 +0, +1, +2, +3, +4
                 bram_addr_b <= (req_phase == 0) ? ({axis_bram_index * EXPAND_VOXEL_ROW} + req_phase) 
                                                 : ({st1_bram_index * EXPAND_VOXEL_ROW} + req_phase);
 
@@ -167,7 +165,7 @@ module pfe #(
             for (k = 0; k < 4; k = k + 1) begin  // 一次只处理一行(4个点)
                 if (base_idx + k < cur_pnum) begin
                     cur_point_data = bram_rdata_b[k*64+:64];
-
+                    
                     st2_points_buffer[base_idx+k] <= cur_point_data;
 
                     sum_x_step = sum_x_step + $signed(cur_point_data[63-:16]);

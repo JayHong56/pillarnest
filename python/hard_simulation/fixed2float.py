@@ -10,15 +10,14 @@ def q_to_float(value, total_bits, fractional_bits):
     返回:
         float: 转换后的浮点数。
     """
-    # 1. 如果输入是十六进制字符串，先转为整数
+    # 1. 字符串输入统一按十六进制解析
     if isinstance(value, str):
-        # 自动识别 '0x' 前缀，或者无前缀的 16 进制
-        base = 16 if value.lower().startswith('0x') or any(c in 'abcdef' for c in value.lower()) else 10
-        # 这种判断可能不完全准确，建议显式指定。为了通用性，这里假设字符串输入且带0x或者是纯数字字符串
-        try:
-             value = int(value, 16)
-        except ValueError:
-             value = int(value)
+        value = value.strip().lower()
+        if value.startswith("0x"):
+            value = value[2:]
+        if value == "":
+            raise ValueError("empty input")
+        value = int(value, 16)
 
     # 2. 确保数值在 total_bits 范围内 (截断高位垃圾数据)
     mask = (1 << total_bits) - 1
@@ -56,28 +55,18 @@ def float_to_q(value, total_bits, fractional_bits):
     hex_digits = (total_bits + 3) // 4
     return f"0x{int_val:0{hex_digits}x}"
 
-# ==========================================
-# 测试用例 (基于你之前的提问)
-# ==========================================
 if __name__ == "__main__":
-    # # 测试 1: 你问过的 -1
-    # hex_val1 = "0xFF80"
-    # res1 = q_to_float(hex_val1, 16, 7)
-    # print(f"Hex: {hex_val1} -> Float: {res1}") 
-    # # 预期: -1.0
+    print("输入 16 位十六进制（可带或不带 0x），按 Q8.8 转十进制浮点。")
+    print("示例: 输入 1234 -> 按 0x1234 解析。输入 q 退出。")
 
-    # # 测试 2: 你问过的 fd4c
-    # hex_val2 = "0xfd4c"
-    # res2 = q_to_float(hex_val2, 16, 7)
-    # print(f"Hex: {hex_val2} -> Float: {res2}") 
-    # # 预期: -5.40625
+    while True:
+        raw = input("hex> ").strip()
+        if raw.lower() in {"q", "quit", "exit"}:
+            print("bye")
+            break
 
-    # # 测试 3: 正数测试 (例如 1.5 = 1.5 * 128 = 192 = 0x00C0)
-    # hex_val3 = "0x00C0"
-    # res3 = q_to_float(hex_val3, 16, 7)
-    # print(f"Hex: {hex_val3} -> Float: {res3}")
-    
-    # print("-" * 30)
-    # print("反向转换测试 (Float -> Q9.7):")
-    print(float_to_q( 54, 16, 8))
-    print(q_to_float("0x32e1", 16, 8))  # 应该是 54.0
+        try:
+            result = q_to_float(raw, total_bits=16, fractional_bits=8)
+            print(f"0x{int(raw, 16):04X} (Q8.8) -> {result}")
+        except ValueError:
+            print("输入无效，请输入十六进制，例如 1234 或 0x1234")

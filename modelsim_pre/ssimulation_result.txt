@@ -1,4 +1,3 @@
-Key_X, Key_Y, Bucket_ID, Total_Load
 KILL, global_timer:   123, addr:   4, ts_reg:   101, r_pn:     2, x:  286, y:  357
 KILL, global_timer:   151, addr: 190, ts_reg:   101, r_pn:     2, x:  304, y:  357
 KILL, global_timer:   176, addr: 120, ts_reg:   101, r_pn:     3, x:  324, y:  357
@@ -197,7 +196,7 @@ KILL, global_timer:  1527, addr: 187, ts_reg:   101, r_pn:     3, x:  321, y:  3
 KILL, global_timer:  1531, addr: 233, ts_reg:   101, r_pn:     4, x:  312, y:  368
 KILL, global_timer:  1537, addr: 114, ts_reg:   101, r_pn:     1, x:  302, y:  371
 KILL, global_timer:  1538, addr: 216, ts_reg:   101, r_pn:     1, x:   91, y:  422
-KILL, global_timer:  1550, addr:  57, ts_reg:   101, r_pn:    15, x:  357, y:  357
+KILL, global_timer:  1550, addr:  57, ts_reg:   101, r_pn:    20, x:  357, y:  357
 KILL, global_timer:  1551, addr: 176, ts_reg:   101, r_pn:     3, x:  356, y:  358
 KILL, global_timer:  1556, addr: 229, ts_reg:   101, r_pn:     6, x:  333, y:  363
 KILL, global_timer:  1557, addr: 208, ts_reg:   101, r_pn:     9, x:  329, y:  364
@@ -340,7 +339,7 @@ KILL, global_timer:  2297, addr: 183, ts_reg:   101, r_pn:     1, x:  197, y:  4
 KILL, global_timer:  2300, addr: 108, ts_reg:   101, r_pn:     2, x:  116, y:  452
 KILL, global_timer:  2305, addr:  53, ts_reg:   101, r_pn:     2, x:   24, y:  488
 KILL, global_timer:  2305, addr: 250, ts_reg:   101, r_pn:     1, x:   25, y:  488
-KILL, global_timer:  2311, addr: 224, ts_reg:   101, r_pn:     0, x:  357, y:  358
+KILL, global_timer:  2311, addr: 224, ts_reg:   101, r_pn:    20, x:  357, y:  358
 KILL, global_timer:  2312, addr: 154, ts_reg:   101, r_pn:     9, x:  338, y:  365
 KILL, global_timer:  2318, addr: 132, ts_reg:   101, r_pn:     3, x:  333, y:  367
 KILL, global_timer:  2322, addr: 113, ts_reg:   101, r_pn:     5, x:  323, y:  371
@@ -715,7 +714,7 @@ KILL, global_timer:  3962, addr:  95, ts_reg:   101, r_pn:     1, x:  196, y:  4
 KILL, global_timer:  3963, addr: 160, ts_reg:   101, r_pn:     2, x:  143, y:  522
 KILL, global_timer:  3964, addr: 149, ts_reg:   101, r_pn:     1, x:  148, y:  518
 KILL, global_timer:  3968, addr:  42, ts_reg:   101, r_pn:     2, x:   91, y:  562
-KILL, global_timer:  3972, addr: 182, ts_reg:   101, r_pn:     3, x:  356, y:  359
+KILL, global_timer:  3972, addr: 182, ts_reg:   101, r_pn:    20, x:  356, y:  359
 KILL, global_timer:  3986, addr: 190, ts_reg:   101, r_pn:     5, x:  320, y:  387
 KILL, global_timer:  3986, addr:  93, ts_reg:   101, r_pn:     2, x:  310, y:  395
 KILL, global_timer:  3992, addr: 222, ts_reg:   101, r_pn:     4, x:  303, y:  400
@@ -837,7 +836,7 @@ KILL, global_timer:  4420, addr: 181, ts_reg:   101, r_pn:     8, x:  307, y:  4
 KILL, global_timer:  4424, addr: 206, ts_reg:   101, r_pn:     3, x:  241, y:  463
 KILL, global_timer:  4424, addr:  47, ts_reg:   101, r_pn:     1, x:  138, y:  556
 KILL, global_timer:  4430, addr: 248, ts_reg:   101, r_pn:     1, x:  178, y:  520
-KILL, global_timer:  4434, addr: 172, ts_reg:   101, r_pn:     1, x:  357, y:  359
+KILL, global_timer:  4434, addr: 172, ts_reg:   101, r_pn:    20, x:  357, y:  359
 KILL, global_timer:  4448, addr:   2, ts_reg:   101, r_pn:     5, x:  319, y:  393
 KILL, global_timer:  4453, addr: 142, ts_reg:   101, r_pn:     3, x:  306, y:  405
 KILL, global_timer:  4453, addr:  48, ts_reg:   101, r_pn:     1, x:  301, y:  410
@@ -975,7 +974,7 @@ KILL, global_timer:  4910, addr: 200, ts_reg:   101, r_pn:     7, x:  307, y:  4
 KILL, global_timer:  4910, addr:  23, ts_reg:   101, r_pn:     1, x:  304, y:  416
 KILL, global_timer:  4918, addr: 128, ts_reg:   101, r_pn:     2, x:  178, y:  552
 KILL, global_timer:  4918, addr:  66, ts_reg:   101, r_pn:     1, x:  172, y:  558
-KILL, global_timer:  4930, addr:  72, ts_reg:   101, r_pn:     2, x:  356, y:  360
+KILL, global_timer:  4930, addr:  72, ts_reg:   101, r_pn:    20, x:  356, y:  360
 KILL, global_timer:  4940, addr:  16, ts_reg:   101, r_pn:     2, x:  319, y:  401
 KILL, global_timer:  4940, addr: 222, ts_reg:   101, r_pn:     2, x:  313, y:  407
 KILL, global_timer:  4945, addr: 190, ts_reg:   101, r_pn:     1, x:  287, y:  435
@@ -1107,7 +1106,7 @@ KILL, global_timer:  5391, addr: 249, ts_reg:   101, r_pn:     2, x:  323, y:  4
 KILL, global_timer:  5391, addr: 138, ts_reg:   101, r_pn:     2, x:  318, y:  409
 KILL, global_timer:  5395, addr: 204, ts_reg:   101, r_pn:     2, x:  307, y:  423
 KILL, global_timer:  5395, addr: 218, ts_reg:   101, r_pn:     2, x:  306, y:  424
-KILL, global_timer:  5399, addr:  21, ts_reg:   101, r_pn:    27, x:  360, y:  357
+KILL, global_timer:  5399, addr:  21, ts_reg:   101, r_pn:    20, x:  360, y:  357
 KILL, global_timer:  5399, addr:  61, ts_reg:   101, r_pn:     3, x:  252, y:  493
 KILL, global_timer:  5399, addr:  15, ts_reg:   101, r_pn:     1, x:  255, y:  489
 KILL, global_timer:  5406, addr: 120, ts_reg:   101, r_pn:     1, x:  253, y:  491
@@ -1291,7 +1290,7 @@ KILL, global_timer:  6075, addr: 116, ts_reg:   101, r_pn:     2, x:  293, y:  4
 KILL, global_timer:  6075, addr:  56, ts_reg:   101, r_pn:     1, x:  285, y:  477
 KILL, global_timer:  6082, addr: 240, ts_reg:   101, r_pn:     2, x:  270, y:  502
 KILL, global_timer:  6086, addr:  26, ts_reg:   101, r_pn:     5, x:  267, y:  507
-KILL, global_timer:  6090, addr:  24, ts_reg:   101, r_pn:     0, x:  357, y:  360
+KILL, global_timer:  6090, addr:  24, ts_reg:   101, r_pn:    20, x:  357, y:  360
 KILL, global_timer:  6097, addr: 153, ts_reg:   101, r_pn:     2, x:  345, y:  381
 KILL, global_timer:  6097, addr:  90, ts_reg:   101, r_pn:     5, x:  342, y:  385
 KILL, global_timer:  6105, addr: 208, ts_reg:   101, r_pn:     3, x:  333, y:  400
@@ -1437,7 +1436,7 @@ KILL, global_timer:  6547, addr: 173, ts_reg:   101, r_pn:     1, x:  209, y:  6
 KILL, global_timer:  6551, addr:   6, ts_reg:   101, r_pn:     3, x:  264, y:  544
 KILL, global_timer:  6551, addr:  71, ts_reg:   101, r_pn:     1, x:  268, y:  536
 KILL, global_timer:  6551, addr: 104, ts_reg:   101, r_pn:     1, x:  265, y:  542
-KILL, global_timer:  6557, addr: 135, ts_reg:   101, r_pn:    25, x:  357, y:  361
+KILL, global_timer:  6557, addr: 135, ts_reg:   101, r_pn:    20, x:  357, y:  361
 KILL, global_timer:  6561, addr: 224, ts_reg:   101, r_pn:     2, x:  347, y:  382
 KILL, global_timer:  6565, addr: 191, ts_reg:   101, r_pn:     5, x:  342, y:  391
 KILL, global_timer:  6573, addr:  51, ts_reg:   101, r_pn:     5, x:  321, y:  433
@@ -1546,7 +1545,7 @@ KILL, global_timer:  6848, addr: 203, ts_reg:   101, r_pn:     1, x:  249, y:  6
 KILL, global_timer:  6848, addr: 168, ts_reg:   101, r_pn:     1, x:  229, y:  649
 KILL, global_timer:  6848, addr: 248, ts_reg:   101, r_pn:     1, x:  274, y:  548
 KILL, global_timer:  6848, addr: 105, ts_reg:   101, r_pn:     1, x:  278, y:  539
-KILL, global_timer:  6853, addr: 232, ts_reg:   101, r_pn:    28, x:  358, y:  360
+KILL, global_timer:  6853, addr: 232, ts_reg:   101, r_pn:    20, x:  358, y:  360
 KILL, global_timer:  6859, addr: 254, ts_reg:   101, r_pn:     2, x:  349, y:  381
 KILL, global_timer:  6865, addr: 215, ts_reg:   101, r_pn:     7, x:  344, y:  391
 KILL, global_timer:  6865, addr: 144, ts_reg:   101, r_pn:     3, x:  343, y:  394
@@ -1570,7 +1569,7 @@ KILL, global_timer:  6908, addr:  51, ts_reg:   101, r_pn:     1, x:  293, y:  5
 KILL, global_timer:  6908, addr: 156, ts_reg:   101, r_pn:     1, x:  263, y:  580
 KILL, global_timer:  6908, addr:  61, ts_reg:   101, r_pn:     1, x:  269, y:  566
 KILL, global_timer:  6912, addr: 174, ts_reg:   101, r_pn:     1, x:  278, y:  545
-KILL, global_timer:  6921, addr: 189, ts_reg:   101, r_pn:    26, x:  357, y:  362
+KILL, global_timer:  6921, addr: 189, ts_reg:   101, r_pn:    20, x:  357, y:  362
 KILL, global_timer:  6925, addr:   6, ts_reg:   101, r_pn:     7, x:  348, y:  383
 KILL, global_timer:  6932, addr: 220, ts_reg:   101, r_pn:     4, x:  340, y:  402
 KILL, global_timer:  6938, addr: 117, ts_reg:   101, r_pn:     2, x:  319, y:  451
@@ -1839,7 +1838,7 @@ KILL, global_timer:  7749, addr: 170, ts_reg:   101, r_pn:     1, x:  327, y:  4
 KILL, global_timer:  7749, addr: 103, ts_reg:   101, r_pn:     1, x:  315, y:  523
 KILL, global_timer:  7755, addr:  56, ts_reg:   101, r_pn:     2, x:  282, y:  648
 KILL, global_timer:  7755, addr: 149, ts_reg:   101, r_pn:     1, x:  270, y:  694
-KILL, global_timer:  7759, addr: 133, ts_reg:   101, r_pn:    16, x:  358, y:  361
+KILL, global_timer:  7759, addr: 133, ts_reg:   101, r_pn:    20, x:  358, y:  361
 KILL, global_timer:  7764, addr: 186, ts_reg:   101, r_pn:    14, x:  356, y:  369
 KILL, global_timer:  7764, addr: 134, ts_reg:   101, r_pn:     7, x:  352, y:  384
 KILL, global_timer:  7764, addr: 102, ts_reg:   101, r_pn:     6, x:  351, y:  388
@@ -1923,7 +1922,7 @@ KILL, global_timer:  8032, addr:  34, ts_reg:   101, r_pn:     2, x:  324, y:  5
 KILL, global_timer:  8032, addr:  83, ts_reg:   101, r_pn:     1, x:  318, y:  553
 KILL, global_timer:  8032, addr: 209, ts_reg:   101, r_pn:     1, x:  307, y:  604
 KILL, global_timer:  8036, addr: 153, ts_reg:   101, r_pn:     2, x:  299, y:  647
-KILL, global_timer:  8043, addr:  91, ts_reg:   101, r_pn:    26, x:  358, y:  362
+KILL, global_timer:  8043, addr:  91, ts_reg:   101, r_pn:    20, x:  358, y:  362
 KILL, global_timer:  8047, addr:  64, ts_reg:   101, r_pn:     6, x:  353, y:  387
 KILL, global_timer:  8048, addr: 228, ts_reg:   101, r_pn:     3, x:  352, y:  393
 KILL, global_timer:  8052, addr: 139, ts_reg:   101, r_pn:     2, x:  352, y:  396
@@ -1971,7 +1970,7 @@ KILL, global_timer:  8189, addr: 219, ts_reg:   101, r_pn:     4, x:  317, y:  5
 KILL, global_timer:  8189, addr:  14, ts_reg:   101, r_pn:     1, x:  320, y:  573
 KILL, global_timer:  8189, addr: 105, ts_reg:   101, r_pn:     1, x:  305, y:  658
 KILL, global_timer:  8193, addr: 166, ts_reg:   101, r_pn:     2, x:  305, y:  657
-KILL, global_timer:  8201, addr: 165, ts_reg:   101, r_pn:    22, x:  357, y:  369
+KILL, global_timer:  8201, addr: 165, ts_reg:   101, r_pn:    20, x:  357, y:  369
 KILL, global_timer:  8201, addr: 247, ts_reg:   101, r_pn:     6, x:  354, y:  387
 KILL, global_timer:  8209, addr:  93, ts_reg:   101, r_pn:     4, x:  351, y:  404
 KILL, global_timer:  8210, addr: 222, ts_reg:   101, r_pn:     4, x:  349, y:  415
@@ -2009,7 +2008,7 @@ KILL, global_timer:  8316, addr: 155, ts_reg:   101, r_pn:     3, x:  322, y:  5
 KILL, global_timer:  8316, addr:  52, ts_reg:   101, r_pn:     1, x:  317, y:  630
 KILL, global_timer:  8316, addr: 245, ts_reg:   101, r_pn:     1, x:  309, y:  677
 KILL, global_timer:  8316, addr:  38, ts_reg:   101, r_pn:     1, x:  310, y:  677
-KILL, global_timer:  8326, addr: 114, ts_reg:   101, r_pn:     6, x:  360, y:  357
+KILL, global_timer:  8326, addr: 114, ts_reg:   101, r_pn:    20, x:  360, y:  357
 KILL, global_timer:  8326, addr: 233, ts_reg:   101, r_pn:     5, x:  358, y:  369
 KILL, global_timer:  8333, addr:   7, ts_reg:   101, r_pn:     5, x:  354, y:  391
 KILL, global_timer:  8337, addr: 147, ts_reg:   101, r_pn:     4, x:  352, y:  405
@@ -2169,8 +2168,8 @@ KILL, global_timer:  9045, addr: 127, ts_reg:   101, r_pn:     2, x:  358, y:  4
 KILL, global_timer:  9049, addr: 140, ts_reg:   101, r_pn:     2, x:  357, y:  476
 KILL, global_timer:  9049, addr:  92, ts_reg:   101, r_pn:     1, x:  357, y:  527
 KILL, global_timer:  9053, addr: 189, ts_reg:   101, r_pn:     1, x:  354, y:  691
-KILL, global_timer:  9064, addr: 227, ts_reg:   101, r_pn:     0, x:  359, y:  361
-KILL, global_timer:  9064, addr:  12, ts_reg:   101, r_pn:     1, x:  359, y:  362
+KILL, global_timer:  9064, addr: 227, ts_reg:   101, r_pn:    20, x:  359, y:  361
+KILL, global_timer:  9064, addr:  12, ts_reg:   101, r_pn:    20, x:  359, y:  362
 KILL, global_timer:  9078, addr:  91, ts_reg:   101, r_pn:     2, x:  358, y:  450
 KILL, global_timer:  9078, addr: 205, ts_reg:   101, r_pn:     1, x:  358, y:  476
 KILL, global_timer:  9078, addr:  82, ts_reg:   101, r_pn:     1, x:  358, y:  526
@@ -2417,7 +2416,7 @@ KILL, global_timer: 10498, addr:  41, ts_reg:   101, r_pn:     2, x:  380, y:  4
 KILL, global_timer: 10498, addr: 206, ts_reg:   101, r_pn:     2, x:  386, y:  477
 KILL, global_timer: 10498, addr: 194, ts_reg:   101, r_pn:     1, x:  399, y:  534
 KILL, global_timer: 10498, addr: 127, ts_reg:   101, r_pn:     1, x:  413, y:  595
-KILL, global_timer: 10514, addr: 145, ts_reg:   101, r_pn:    23, x:  360, y:  362
+KILL, global_timer: 10514, addr: 145, ts_reg:   101, r_pn:    20, x:  360, y:  362
 KILL, global_timer: 10524, addr: 157, ts_reg:   101, r_pn:     4, x:  369, y:  400
 KILL, global_timer: 10524, addr: 227, ts_reg:   101, r_pn:     4, x:  370, y:  405
 KILL, global_timer: 10530, addr: 149, ts_reg:   101, r_pn:     3, x:  377, y:  435
@@ -2490,7 +2489,7 @@ KILL, global_timer: 10816, addr: 205, ts_reg:   101, r_pn:     2, x:  404, y:  5
 KILL, global_timer: 10816, addr: 147, ts_reg:   101, r_pn:     1, x:  425, y:  590
 KILL, global_timer: 10821, addr: 251, ts_reg:   101, r_pn:     2, x:  435, y:  628
 KILL, global_timer: 10821, addr: 118, ts_reg:   101, r_pn:     1, x:  415, y:  555
-KILL, global_timer: 10831, addr: 168, ts_reg:   101, r_pn:     0, x:  360, y:  361
+KILL, global_timer: 10831, addr: 168, ts_reg:   101, r_pn:    20, x:  360, y:  361
 KILL, global_timer: 10838, addr: 123, ts_reg:   101, r_pn:     6, x:  367, y:  385
 KILL, global_timer: 10838, addr:  55, ts_reg:   101, r_pn:     4, x:  368, y:  388
 KILL, global_timer: 10847, addr: 116, ts_reg:   101, r_pn:     6, x:  374, y:  409
@@ -2500,7 +2499,7 @@ KILL, global_timer: 10852, addr:  74, ts_reg:   101, r_pn:     1, x:  394, y:  4
 KILL, global_timer: 10852, addr: 131, ts_reg:   101, r_pn:     1, x:  405, y:  516
 KILL, global_timer: 10852, addr:   8, ts_reg:   101, r_pn:     1, x:  411, y:  537
 KILL, global_timer: 10857, addr: 141, ts_reg:   101, r_pn:     2, x:  437, y:  628
-KILL, global_timer: 10864, addr: 114, ts_reg:   101, r_pn:     5, x:  360, y:  357
+KILL, global_timer: 10864, addr: 114, ts_reg:   101, r_pn:    20, x:  360, y:  357
 KILL, global_timer: 10873, addr:  42, ts_reg:   101, r_pn:     1, x:  367, y:  384
 KILL, global_timer: 10883, addr:   9, ts_reg:   101, r_pn:     4, x:  373, y:  404
 KILL, global_timer: 10883, addr:  11, ts_reg:   101, r_pn:     2, x:  376, y:  415
@@ -2764,7 +2763,7 @@ KILL, global_timer: 11816, addr: 119, ts_reg:   101, r_pn:     1, x:  432, y:  5
 KILL, global_timer: 11816, addr: 152, ts_reg:   101, r_pn:     1, x:  437, y:  522
 KILL, global_timer: 11820, addr: 225, ts_reg:   101, r_pn:     1, x:  437, y:  521
 KILL, global_timer: 11820, addr:   2, ts_reg:   101, r_pn:     1, x:  436, y:  520
-KILL, global_timer: 11833, addr: 169, ts_reg:   101, r_pn:    28, x:  362, y:  364
+KILL, global_timer: 11833, addr: 169, ts_reg:   101, r_pn:    20, x:  362, y:  364
 KILL, global_timer: 11839, addr:  81, ts_reg:   101, r_pn:     2, x:  376, y:  392
 KILL, global_timer: 11844, addr: 187, ts_reg:   101, r_pn:     4, x:  383, y:  407
 KILL, global_timer: 11848, addr: 203, ts_reg:   101, r_pn:     2, x:  388, y:  417
@@ -2782,7 +2781,7 @@ KILL, global_timer: 11887, addr:  28, ts_reg:   101, r_pn:     3, x:  388, y:  4
 KILL, global_timer: 11891, addr:  46, ts_reg:   101, r_pn:     1, x:  409, y:  461
 KILL, global_timer: 11891, addr:  55, ts_reg:   101, r_pn:     1, x:  427, y:  496
 KILL, global_timer: 11891, addr: 168, ts_reg:   101, r_pn:     1, x:  433, y:  508
-KILL, global_timer: 11907, addr: 108, ts_reg:   101, r_pn:    11, x:  361, y:  362
+KILL, global_timer: 11907, addr: 108, ts_reg:   101, r_pn:    20, x:  361, y:  362
 KILL, global_timer: 11919, addr:  10, ts_reg:   101, r_pn:     5, x:  379, y:  398
 KILL, global_timer: 11919, addr: 135, ts_reg:   101, r_pn:     4, x:  381, y:  402
 KILL, global_timer: 11924, addr:  72, ts_reg:   101, r_pn:     1, x:  388, y:  415
@@ -2882,7 +2881,7 @@ KILL, global_timer: 12375, addr: 130, ts_reg:   101, r_pn:     5, x:  388, y:  4
 KILL, global_timer: 12375, addr:  58, ts_reg:   101, r_pn:     4, x:  391, y:  412
 KILL, global_timer: 12375, addr:  14, ts_reg:   101, r_pn:     1, x:  422, y:  464
 KILL, global_timer: 12381, addr:  27, ts_reg:   101, r_pn:     1, x:  419, y:  459
-KILL, global_timer: 12393, addr:  60, ts_reg:   101, r_pn:     9, x:  362, y:  362
+KILL, global_timer: 12393, addr:  60, ts_reg:   101, r_pn:    20, x:  362, y:  362
 KILL, global_timer: 12393, addr:  22, ts_reg:   101, r_pn:     4, x:  363, y:  364
 KILL, global_timer: 12399, addr: 145, ts_reg:   101, r_pn:     6, x:  377, y:  388
 KILL, global_timer: 12410, addr: 161, ts_reg:   101, r_pn:     5, x:  391, y:  411
@@ -2963,7 +2962,7 @@ KILL, global_timer: 12809, addr: 155, ts_reg:   101, r_pn:     2, x:  392, y:  4
 KILL, global_timer: 12817, addr:  28, ts_reg:   101, r_pn:    12, x:  415, y:  440
 KILL, global_timer: 12817, addr:  87, ts_reg:   101, r_pn:     3, x:  415, y:  439
 KILL, global_timer: 12822, addr:  22, ts_reg:   101, r_pn:     2, x:  393, y:  407
-KILL, global_timer: 12826, addr:  24, ts_reg:   101, r_pn:    14, x:  361, y:  361
+KILL, global_timer: 12826, addr:  24, ts_reg:   101, r_pn:    20, x:  361, y:  361
 KILL, global_timer: 12843, addr:  46, ts_reg:   101, r_pn:     9, x:  388, y:  399
 KILL, global_timer: 12847, addr: 200, ts_reg:   101, r_pn:     1, x:  391, y:  403
 KILL, global_timer: 12851, addr:   1, ts_reg:   101, r_pn:     4, x:  416, y:  440
@@ -3150,7 +3149,7 @@ KILL, global_timer: 14133, addr: 123, ts_reg:   101, r_pn:     1, x:  387, y:  3
 KILL, global_timer: 14137, addr: 221, ts_reg:   101, r_pn:     3, x:  421, y:  417
 KILL, global_timer: 14142, addr:  50, ts_reg:   101, r_pn:     1, x:  429, y:  423
 KILL, global_timer: 14148, addr:  24, ts_reg:   101, r_pn:     2, x:  419, y:  414
-KILL, global_timer: 14153, addr: 194, ts_reg:   101, r_pn:     9, x:  362, y:  361
+KILL, global_timer: 14153, addr: 194, ts_reg:   101, r_pn:    20, x:  362, y:  361
 KILL, global_timer: 14158, addr:  16, ts_reg:   101, r_pn:     1, x:  379, y:  376
 KILL, global_timer: 14169, addr:   3, ts_reg:   101, r_pn:     3, x:  389, y:  385
 KILL, global_timer: 14169, addr: 112, ts_reg:   101, r_pn:     3, x:  391, y:  388
@@ -3172,7 +3171,7 @@ KILL, global_timer: 14251, addr: 205, ts_reg:   101, r_pn:     2, x:  450, y:  4
 KILL, global_timer: 14259, addr:  74, ts_reg:   101, r_pn:     2, x:  421, y:  414
 KILL, global_timer: 14267, addr:  69, ts_reg:   101, r_pn:     2, x:  377, y:  374
 KILL, global_timer: 14272, addr: 232, ts_reg:   101, r_pn:     2, x:  384, y:  380
-KILL, global_timer: 14281, addr: 185, ts_reg:   101, r_pn:    26, x:  388, y:  384
+KILL, global_timer: 14281, addr: 185, ts_reg:   101, r_pn:    20, x:  388, y:  384
 KILL, global_timer: 14282, addr: 190, ts_reg:   101, r_pn:     1, x:  424, y:  416
 KILL, global_timer: 14286, addr: 195, ts_reg:   101, r_pn:     2, x:  451, y:  441
 KILL, global_timer: 14294, addr:   4, ts_reg:   101, r_pn:     1, x:  422, y:  414
@@ -3238,7 +3237,7 @@ KILL, global_timer: 14644, addr: 175, ts_reg:   101, r_pn:     2, x:  434, y:  4
 KILL, global_timer: 14648, addr:  39, ts_reg:   101, r_pn:     1, x:  462, y:  440
 KILL, global_timer: 14648, addr: 169, ts_reg:   101, r_pn:     1, x:  440, y:  423
 KILL, global_timer: 14652, addr: 165, ts_reg:   101, r_pn:     1, x:  433, y:  417
-KILL, global_timer: 14663, addr: 184, ts_reg:   101, r_pn:     4, x:  363, y:  361
+KILL, global_timer: 14663, addr: 184, ts_reg:   101, r_pn:    20, x:  363, y:  361
 KILL, global_timer: 14680, addr: 213, ts_reg:   101, r_pn:     1, x:  435, y:  418
 KILL, global_timer: 14680, addr: 230, ts_reg:   101, r_pn:     2, x:  441, y:  423
 KILL, global_timer: 14684, addr: 107, ts_reg:   101, r_pn:     2, x:  409, y:  397
@@ -3254,7 +3253,7 @@ KILL, global_timer: 14751, addr:  92, ts_reg:   101, r_pn:    12, x:  390, y:  3
 KILL, global_timer: 14755, addr: 214, ts_reg:   101, r_pn:     1, x:  435, y:  416
 KILL, global_timer: 14756, addr: 244, ts_reg:   101, r_pn:     2, x:  443, y:  423
 KILL, global_timer: 14760, addr: 255, ts_reg:   101, r_pn:     3, x:  465, y:  440
-KILL, global_timer: 14771, addr: 182, ts_reg:   101, r_pn:     5, x:  362, y:  360
+KILL, global_timer: 14771, addr: 182, ts_reg:   101, r_pn:    20, x:  362, y:  360
 KILL, global_timer: 14776, addr:  78, ts_reg:   101, r_pn:    11, x:  381, y:  375
 KILL, global_timer: 14777, addr:  74, ts_reg:   101, r_pn:     1, x:  386, y:  378
 KILL, global_timer: 14794, addr: 206, ts_reg:   101, r_pn:     6, x:  409, y:  396
@@ -3414,7 +3413,7 @@ KILL, global_timer: 15823, addr:  29, ts_reg:   101, r_pn:     6, x:  391, y:  3
 KILL, global_timer: 15836, addr: 208, ts_reg:   101, r_pn:     2, x:  465, y:  414
 KILL, global_timer: 15836, addr: 233, ts_reg:   101, r_pn:     2, x:  465, y:  413
 KILL, global_timer: 15852, addr: 138, ts_reg:   101, r_pn:     6, x:  384, y:  371
-KILL, global_timer: 15862, addr: 225, ts_reg:   101, r_pn:    24, x:  388, y:  373
+KILL, global_timer: 15862, addr: 225, ts_reg:   101, r_pn:    20, x:  388, y:  373
 KILL, global_timer: 15862, addr: 210, ts_reg:   101, r_pn:     7, x:  392, y:  375
 KILL, global_timer: 15862, addr: 189, ts_reg:   101, r_pn:     1, x:  468, y:  415
 KILL, global_timer: 15870, addr:  61, ts_reg:   101, r_pn:     7, x:  409, y:  384
@@ -3446,7 +3445,7 @@ KILL, global_timer: 15999, addr:  14, ts_reg:   101, r_pn:     2, x:  390, y:  3
 KILL, global_timer: 16003, addr:  30, ts_reg:   101, r_pn:     9, x:  392, y:  374
 KILL, global_timer: 16025, addr: 139, ts_reg:   101, r_pn:     9, x:  379, y:  368
 KILL, global_timer: 16031, addr: 102, ts_reg:   101, r_pn:     6, x:  386, y:  371
-KILL, global_timer: 16036, addr:  35, ts_reg:   101, r_pn:    25, x:  388, y:  372
+KILL, global_timer: 16036, addr:  35, ts_reg:   101, r_pn:    20, x:  388, y:  372
 KILL, global_timer: 16050, addr: 176, ts_reg:   101, r_pn:     3, x:  525, y:  438
 KILL, global_timer: 16060, addr:  78, ts_reg:   101, r_pn:     1, x:  379, y:  367
 KILL, global_timer: 16064, addr: 243, ts_reg:   101, r_pn:     2, x:  383, y:  369
@@ -3471,7 +3470,7 @@ KILL, global_timer: 16183, addr: 162, ts_reg:   101, r_pn:     2, x:  482, y:  4
 KILL, global_timer: 16187, addr:  71, ts_reg:   101, r_pn:     4, x:  484, y:  415
 KILL, global_timer: 16187, addr: 216, ts_reg:   101, r_pn:     1, x:  535, y:  438
 KILL, global_timer: 16194, addr: 238, ts_reg:   101, r_pn:     1, x:  479, y:  412
-KILL, global_timer: 16199, addr:  70, ts_reg:   101, r_pn:     6, x:  363, y:  360
+KILL, global_timer: 16199, addr:  70, ts_reg:   101, r_pn:    20, x:  363, y:  360
 KILL, global_timer: 16199, addr:  78, ts_reg:   101, r_pn:     1, x:  379, y:  367
 KILL, global_timer: 16199, addr:  16, ts_reg:   101, r_pn:     9, x:  381, y:  368
 KILL, global_timer: 16213, addr: 241, ts_reg:   101, r_pn:     6, x:  390, y:  372
@@ -3480,7 +3479,7 @@ KILL, global_timer: 16220, addr: 128, ts_reg:   101, r_pn:     1, x:  486, y:  4
 KILL, global_timer: 16220, addr: 125, ts_reg:   101, r_pn:     2, x:  485, y:  415
 KILL, global_timer: 16224, addr: 218, ts_reg:   101, r_pn:     1, x:  537, y:  438
 KILL, global_timer: 16231, addr: 175, ts_reg:   101, r_pn:     1, x:  481, y:  412
-KILL, global_timer: 16247, addr: 116, ts_reg:   101, r_pn:    24, x:  388, y:  371
+KILL, global_timer: 16247, addr: 116, ts_reg:   101, r_pn:    20, x:  388, y:  371
 KILL, global_timer: 16252, addr:   6, ts_reg:   101, r_pn:     2, x:  391, y:  372
 KILL, global_timer: 16252, addr: 215, ts_reg:   101, r_pn:     2, x:  486, y:  414
 KILL, global_timer: 16258, addr:  84, ts_reg:   101, r_pn:     1, x:  540, y:  438
@@ -3505,7 +3504,7 @@ KILL, global_timer: 16366, addr: 101, ts_reg:   101, r_pn:     1, x:  548, y:  4
 KILL, global_timer: 16371, addr: 126, ts_reg:   101, r_pn:     2, x:  547, y:  437
 KILL, global_timer: 16384, addr:  79, ts_reg:   101, r_pn:     3, x:  383, y:  368
 KILL, global_timer: 16385, addr: 208, ts_reg:   101, r_pn:    13, x:  387, y:  370
-KILL, global_timer: 16390, addr: 160, ts_reg:   101, r_pn:    21, x:  388, y:  370
+KILL, global_timer: 16390, addr: 160, ts_reg:   101, r_pn:    20, x:  388, y:  370
 KILL, global_timer: 16398, addr:  10, ts_reg:   101, r_pn:     1, x:  493, y:  414
 KILL, global_timer: 16398, addr:  51, ts_reg:   101, r_pn:     2, x:  496, y:  415
 KILL, global_timer: 16402, addr: 229, ts_reg:   101, r_pn:     1, x:  551, y:  438
@@ -3533,7 +3532,7 @@ KILL, global_timer: 16541, addr:  33, ts_reg:   101, r_pn:     1, x:  503, y:  4
 KILL, global_timer: 16541, addr: 187, ts_reg:   101, r_pn:     1, x:  563, y:  437
 KILL, global_timer: 16545, addr:  75, ts_reg:   101, r_pn:     1, x:  562, y:  437
 KILL, global_timer: 16559, addr: 101, ts_reg:   101, r_pn:     1, x:  384, y:  367
-KILL, global_timer: 16565, addr: 207, ts_reg:   101, r_pn:    22, x:  388, y:  369
+KILL, global_timer: 16565, addr: 207, ts_reg:   101, r_pn:    20, x:  388, y:  369
 KILL, global_timer: 16565, addr: 234, ts_reg:   101, r_pn:     1, x:  390, y:  370
 KILL, global_timer: 16572, addr: 224, ts_reg:   101, r_pn:     1, x:  393, y:  371
 KILL, global_timer: 16573, addr: 229, ts_reg:   101, r_pn:     3, x:  504, y:  413
@@ -3570,7 +3569,7 @@ KILL, global_timer: 16754, addr: 191, ts_reg:   101, r_pn:     4, x:  516, y:  4
 KILL, global_timer: 16754, addr: 236, ts_reg:   101, r_pn:     1, x:  515, y:  412
 KILL, global_timer: 16754, addr:  17, ts_reg:   101, r_pn:     2, x:  514, y:  412
 KILL, global_timer: 16772, addr: 170, ts_reg:   101, r_pn:     6, x:  385, y:  367
-KILL, global_timer: 16778, addr: 115, ts_reg:   101, r_pn:    26, x:  388, y:  368
+KILL, global_timer: 16778, addr: 115, ts_reg:   101, r_pn:    20, x:  388, y:  368
 KILL, global_timer: 16784, addr: 121, ts_reg:   101, r_pn:     5, x:  393, y:  370
 KILL, global_timer: 16789, addr: 160, ts_reg:   101, r_pn:     3, x:  409, y:  375
 KILL, global_timer: 16789, addr:  85, ts_reg:   101, r_pn:     2, x:  518, y:  412
@@ -3605,7 +3604,7 @@ KILL, global_timer: 16964, addr: 101, ts_reg:   101, r_pn:     1, x:  534, y:  4
 KILL, global_timer: 16964, addr: 110, ts_reg:   101, r_pn:     2, x:  537, y:  413
 KILL, global_timer: 16971, addr: 179, ts_reg:   101, r_pn:     1, x:  530, y:  411
 KILL, global_timer: 16979, addr:  86, ts_reg:   101, r_pn:    10, x:  381, y:  365
-KILL, global_timer: 16991, addr: 203, ts_reg:   101, r_pn:     0, x:  388, y:  367
+KILL, global_timer: 16991, addr: 203, ts_reg:   101, r_pn:    20, x:  388, y:  367
 KILL, global_timer: 16991, addr: 140, ts_reg:   101, r_pn:    10, x:  392, y:  368
 KILL, global_timer: 16999, addr: 197, ts_reg:   101, r_pn:     1, x:  540, y:  413
 KILL, global_timer: 17005, addr: 130, ts_reg:   101, r_pn:     1, x:  533, y:  411
@@ -3637,7 +3636,7 @@ KILL, global_timer: 17169, addr: 248, ts_reg:   101, r_pn:     1, x:  565, y:  4
 KILL, global_timer: 17173, addr:  97, ts_reg:   101, r_pn:     2, x:  552, y:  411
 KILL, global_timer: 17184, addr: 112, ts_reg:   101, r_pn:     3, x:  382, y:  364
 KILL, global_timer: 17184, addr: 193, ts_reg:   101, r_pn:     8, x:  384, y:  365
-KILL, global_timer: 17192, addr: 240, ts_reg:   101, r_pn:    30, x:  388, y:  366
+KILL, global_timer: 17192, addr: 240, ts_reg:   101, r_pn:    20, x:  388, y:  366
 KILL, global_timer: 17201, addr: 109, ts_reg:   101, r_pn:     2, x:  560, y:  412
 KILL, global_timer: 17201, addr: 214, ts_reg:   101, r_pn:     1, x:  564, y:  413
 KILL, global_timer: 17201, addr: 227, ts_reg:   101, r_pn:     1, x:  563, y:  412
@@ -3665,7 +3664,7 @@ KILL, global_timer: 17339, addr:  16, ts_reg:   101, r_pn:     1, x:  582, y:  4
 KILL, global_timer: 17339, addr:  81, ts_reg:   101, r_pn:     1, x:  672, y:  434
 KILL, global_timer: 17354, addr:  58, ts_reg:   101, r_pn:     3, x:  381, y:  363
 KILL, global_timer: 17360, addr:  80, ts_reg:   101, r_pn:     8, x:  387, y:  365
-KILL, global_timer: 17364, addr:  14, ts_reg:   101, r_pn:    28, x:  388, y:  365
+KILL, global_timer: 17364, addr:  14, ts_reg:   101, r_pn:    20, x:  388, y:  365
 KILL, global_timer: 17374, addr:  36, ts_reg:   101, r_pn:     7, x:  409, y:  370
 KILL, global_timer: 17374, addr: 172, ts_reg:   101, r_pn:     1, x:  587, y:  412
 KILL, global_timer: 17374, addr: 213, ts_reg:   101, r_pn:     2, x:  679, y:  433
@@ -3690,7 +3689,7 @@ KILL, global_timer: 17538, addr: 231, ts_reg:   101, r_pn:    13, x:  392, y:  3
 KILL, global_timer: 17547, addr: 111, ts_reg:   101, r_pn:     1, x:  616, y:  411
 KILL, global_timer: 17547, addr: 140, ts_reg:   101, r_pn:     1, x:  614, y:  410
 KILL, global_timer: 17547, addr: 201, ts_reg:   101, r_pn:     1, x:  618, y:  411
-KILL, global_timer: 17568, addr: 135, ts_reg:   101, r_pn:     2, x:  388, y:  364
+KILL, global_timer: 17568, addr: 135, ts_reg:   101, r_pn:    20, x:  388, y:  364
 KILL, global_timer: 17583, addr:  31, ts_reg:   101, r_pn:     3, x:  618, y:  410
 KILL, global_timer: 17596, addr: 222, ts_reg:   101, r_pn:     8, x:  383, y:  363
 KILL, global_timer: 17604, addr:  76, ts_reg:   101, r_pn:     4, x:  389, y:  364
@@ -3710,12 +3709,12 @@ KILL, global_timer: 17738, addr:  69, ts_reg:   101, r_pn:     7, x:  386, y:  3
 KILL, global_timer: 17754, addr: 143, ts_reg:   101, r_pn:     1, x:  656, y:  409
 KILL, global_timer: 17754, addr: 164, ts_reg:   101, r_pn:     1, x:  661, y:  409
 KILL, global_timer: 17754, addr: 217, ts_reg:   101, r_pn:     1, x:  670, y:  411
-KILL, global_timer: 17776, addr: 200, ts_reg:   101, r_pn:    26, x:  388, y:  363
+KILL, global_timer: 17776, addr: 200, ts_reg:   101, r_pn:    20, x:  388, y:  363
 KILL, global_timer: 17777, addr:  53, ts_reg:   101, r_pn:     7, x:  387, y:  363
 KILL, global_timer: 17781, addr: 179, ts_reg:   101, r_pn:     1, x:  392, y:  363
 KILL, global_timer: 17789, addr:  84, ts_reg:   101, r_pn:     1, x:  666, y:  408
 KILL, global_timer: 17790, addr:  65, ts_reg:   101, r_pn:     3, x:  670, y:  409
-KILL, global_timer: 17801, addr:  45, ts_reg:   101, r_pn:    15, x:  362, y:  359
+KILL, global_timer: 17801, addr:  45, ts_reg:   101, r_pn:    20, x:  362, y:  359
 KILL, global_timer: 17801, addr: 208, ts_reg:   101, r_pn:     4, x:  363, y:  359
 KILL, global_timer: 17801, addr: 218, ts_reg:   101, r_pn:     8, x:  382, y:  362
 KILL, global_timer: 17811, addr: 178, ts_reg:   101, r_pn:     7, x:  389, y:  363
@@ -3725,7 +3724,7 @@ KILL, global_timer: 17858, addr: 230, ts_reg:   101, r_pn:     1, x:  686, y:  4
 KILL, global_timer: 17858, addr: 147, ts_reg:   101, r_pn:     2, x:  690, y:  408
 KILL, global_timer: 17870, addr: 156, ts_reg:   101, r_pn:     1, x:  363, y:  358
 KILL, global_timer: 17871, addr: 181, ts_reg:   101, r_pn:    10, x:  383, y:  362
-KILL, global_timer: 17887, addr: 215, ts_reg:   101, r_pn:    24, x:  391, y:  363
+KILL, global_timer: 17887, addr: 215, ts_reg:   101, r_pn:    20, x:  391, y:  363
 KILL, global_timer: 17887, addr: 161, ts_reg:   101, r_pn:     1, x:  392, y:  363
 KILL, global_timer: 17896, addr: 118, ts_reg:   101, r_pn:     3, x:  696, y:  407
 KILL, global_timer: 17912, addr:  89, ts_reg:   101, r_pn:     7, x:  385, y:  362
@@ -3734,7 +3733,7 @@ KILL, global_timer: 17931, addr: 223, ts_reg:   101, r_pn:     1, x:  713, y:  4
 KILL, global_timer: 17941, addr:  97, ts_reg:   101, r_pn:     3, x:  362, y:  358
 KILL, global_timer: 17946, addr: 150, ts_reg:   101, r_pn:     6, x:  386, y:  362
 KILL, global_timer: 17961, addr: 137, ts_reg:   101, r_pn:     9, x:  409, y:  365
-KILL, global_timer: 17983, addr:  54, ts_reg:   101, r_pn:    26, x:  388, y:  362
+KILL, global_timer: 17983, addr:  54, ts_reg:   101, r_pn:    20, x:  388, y:  362
 KILL, global_timer: 17984, addr: 116, ts_reg:   101, r_pn:     6, x:  387, y:  362
 KILL, global_timer: 18009, addr: 159, ts_reg:   101, r_pn:     6, x:  383, y:  361
 KILL, global_timer: 18016, addr: 212, ts_reg:   101, r_pn:     6, x:  389, y:  362
@@ -3747,7 +3746,7 @@ KILL, global_timer: 18108, addr: 145, ts_reg:   101, r_pn:     3, x:  384, y:  3
 KILL, global_timer: 18137, addr:  97, ts_reg:   101, r_pn:     1, x:  362, y:  358
 KILL, global_timer: 18141, addr: 108, ts_reg:   101, r_pn:     7, x:  385, y:  361
 KILL, global_timer: 18157, addr:  76, ts_reg:   101, r_pn:     5, x:  409, y:  363
-KILL, global_timer: 18180, addr: 112, ts_reg:   101, r_pn:    28, x:  388, y:  361
+KILL, global_timer: 18180, addr: 112, ts_reg:   101, r_pn:    20, x:  388, y:  361
 KILL, global_timer: 18181, addr: 141, ts_reg:   101, r_pn:    14, x:  387, y:  361
 KILL, global_timer: 18190, addr: 177, ts_reg:   101, r_pn:     4, x:  408, y:  363
 KILL, global_timer: 18215, addr:  42, ts_reg:   101, r_pn:     6, x:  389, y:  361
@@ -3763,7 +3762,7 @@ KILL, global_timer: 18371, addr: 194, ts_reg:   101, r_pn:     8, x:  384, y:  3
 KILL, global_timer: 18371, addr: 175, ts_reg:   101, r_pn:     7, x:  385, y:  360
 KILL, global_timer: 18410, addr: 220, ts_reg:   101, r_pn:    10, x:  387, y:  360
 KILL, global_timer: 18411, addr:  99, ts_reg:   101, r_pn:     6, x:  389, y:  360
-KILL, global_timer: 18415, addr: 129, ts_reg:   101, r_pn:     5, x:  388, y:  360
+KILL, global_timer: 18415, addr: 129, ts_reg:   101, r_pn:    20, x:  388, y:  360
 KILL, global_timer: 18415, addr: 204, ts_reg:   101, r_pn:     2, x:  390, y:  360
 KILL, global_timer: 18423, addr: 126, ts_reg:   101, r_pn:     5, x:  409, y:  361
 KILL, global_timer: 18448, addr: 152, ts_reg:   101, r_pn:     9, x:  391, y:  360
@@ -3783,12 +3782,12 @@ KILL, global_timer: 18607, addr:  78, ts_reg:   101, r_pn:     7, x:  385, y:  3
 KILL, global_timer: 18613, addr:  55, ts_reg:   101, r_pn:    10, x:  387, y:  359
 KILL, global_timer: 18614, addr: 133, ts_reg:   101, r_pn:     6, x:  389, y:  359
 KILL, global_timer: 18615, addr:  44, ts_reg:   101, r_pn:     5, x:  391, y:  359
-KILL, global_timer: 18616, addr:  24, ts_reg:   101, r_pn:    28, x:  388, y:  359
+KILL, global_timer: 18616, addr:  24, ts_reg:   101, r_pn:    20, x:  388, y:  359
 KILL, global_timer: 18617, addr: 113, ts_reg:   101, r_pn:    12, x:  392, y:  359
 KILL, global_timer: 18618, addr:  50, ts_reg:   101, r_pn:     6, x:  390, y:  359
 KILL, global_timer: 18619, addr:  83, ts_reg:   101, r_pn:     1, x:  393, y:  359
 KILL, global_timer: 18660, addr: 234, ts_reg:   101, r_pn:     1, x:  396, y:  359
-KILL, global_timer: 18660, addr: 147, ts_reg:   101, r_pn:    23, x:  397, y:  359
+KILL, global_timer: 18660, addr: 147, ts_reg:   101, r_pn:    20, x:  397, y:  359
 KILL, global_timer: 18664, addr:   0, ts_reg:   101, r_pn:     8, x:  398, y:  359
 KILL, global_timer: 18794, addr: 107, ts_reg:   101, r_pn:     6, x:  392, y:  358
 KILL, global_timer: 18794, addr: 141, ts_reg:   101, r_pn:     4, x:  393, y:  358
@@ -3796,7 +3795,7 @@ KILL, global_timer: 18802, addr: 225, ts_reg:   101, r_pn:    11, x:  396, y:  3
 KILL, global_timer: 18802, addr: 254, ts_reg:   101, r_pn:     5, x:  398, y:  358
 KILL, global_timer: 18821, addr:  36, ts_reg:   101, r_pn:    12, x:  387, y:  358
 KILL, global_timer: 18821, addr:  54, ts_reg:   101, r_pn:    13, x:  389, y:  358
-KILL, global_timer: 18825, addr: 121, ts_reg:   101, r_pn:    25, x:  388, y:  358
+KILL, global_timer: 18825, addr: 121, ts_reg:   101, r_pn:    20, x:  388, y:  358
 KILL, global_timer: 18825, addr:  15, ts_reg:   101, r_pn:     6, x:  391, y:  358
 KILL, global_timer: 18825, addr:  52, ts_reg:   101, r_pn:     6, x:  390, y:  358
 KILL, global_timer: 18830, addr:  28, ts_reg:   101, r_pn:    16, x:  397, y:  358
@@ -3817,7 +3816,7 @@ KILL, global_timer: 18995, addr: 203, ts_reg:   101, r_pn:     5, x:  393, y:  3
 KILL, global_timer: 19025, addr:  29, ts_reg:   101, r_pn:     6, x:  389, y:  357
 KILL, global_timer: 19035, addr: 120, ts_reg:   101, r_pn:     8, x:  409, y:  356
 KILL, global_timer: 19051, addr: 182, ts_reg:   101, r_pn:     6, x:  385, y:  357
-KILL, global_timer: 19052, addr: 128, ts_reg:   101, r_pn:    26, x:  388, y:  357
+KILL, global_timer: 19052, addr: 128, ts_reg:   101, r_pn:    20, x:  388, y:  357
 KILL, global_timer: 19053, addr: 175, ts_reg:   101, r_pn:    15, x:  387, y:  357
 KILL, global_timer: 19082, addr:  97, ts_reg:   101, r_pn:     7, x:  384, y:  357
 KILL, global_timer: 19082, addr:  92, ts_reg:   101, r_pn:     1, x:  386, y:  356
@@ -3831,7 +3830,7 @@ KILL, global_timer: 19165, addr:  19, ts_reg:   101, r_pn:    12, x:  409, y:  3
 KILL, global_timer: 19181, addr:  34, ts_reg:   101, r_pn:     9, x:  380, y:  357
 KILL, global_timer: 19196, addr:  30, ts_reg:   101, r_pn:     9, x:  390, y:  356
 KILL, global_timer: 19253, addr:   1, ts_reg:   101, r_pn:    12, x:  387, y:  356
-KILL, global_timer: 19254, addr: 252, ts_reg:   101, r_pn:    27, x:  388, y:  356
+KILL, global_timer: 19254, addr: 252, ts_reg:   101, r_pn:    20, x:  388, y:  356
 KILL, global_timer: 19268, addr: 224, ts_reg:   101, r_pn:     8, x:  409, y:  354
 KILL, global_timer: 19288, addr:  27, ts_reg:   101, r_pn:     6, x:  385, y:  356
 KILL, global_timer: 19320, addr:  50, ts_reg:   101, r_pn:     8, x:  384, y:  356
@@ -3845,7 +3844,7 @@ KILL, global_timer: 19418, addr: 237, ts_reg:   101, r_pn:     8, x:  381, y:  3
 KILL, global_timer: 19431, addr: 226, ts_reg:   101, r_pn:     1, x:  391, y:  354
 KILL, global_timer: 19451, addr:  89, ts_reg:   101, r_pn:     8, x:  380, y:  356
 KILL, global_timer: 19456, addr:  88, ts_reg:   101, r_pn:     9, x:  387, y:  355
-KILL, global_timer: 19460, addr: 251, ts_reg:   101, r_pn:     0, x:  388, y:  355
+KILL, global_timer: 19460, addr: 251, ts_reg:   101, r_pn:    20, x:  388, y:  355
 KILL, global_timer: 19472, addr:  95, ts_reg:   101, r_pn:     5, x:  409, y:  352
 KILL, global_timer: 19500, addr: 189, ts_reg:   101, r_pn:     5, x:  393, y:  354
 KILL, global_timer: 19524, addr: 135, ts_reg:   101, r_pn:     8, x:  385, y:  355
@@ -3854,7 +3853,7 @@ KILL, global_timer: 19576, addr: 195, ts_reg:   101, r_pn:     5, x:  408, y:  3
 KILL, global_timer: 19592, addr: 100, ts_reg:   101, r_pn:     9, x:  384, y:  355
 KILL, global_timer: 19599, addr: 173, ts_reg:   101, r_pn:    12, x:  390, y:  354
 KILL, global_timer: 19624, addr: 196, ts_reg:   101, r_pn:     7, x:  382, y:  355
-KILL, global_timer: 19665, addr:  73, ts_reg:   101, r_pn:    29, x:  388, y:  354
+KILL, global_timer: 19665, addr:  73, ts_reg:   101, r_pn:    20, x:  388, y:  354
 KILL, global_timer: 19671, addr: 251, ts_reg:   101, r_pn:     5, x:  393, y:  353
 KILL, global_timer: 19690, addr: 103, ts_reg:   101, r_pn:     8, x:  381, y:  355
 KILL, global_timer: 19694, addr: 166, ts_reg:   101, r_pn:    11, x:  387, y:  354
@@ -3867,7 +3866,7 @@ KILL, global_timer: 19802, addr: 176, ts_reg:   101, r_pn:    14, x:  390, y:  3
 KILL, global_timer: 19828, addr: 133, ts_reg:   101, r_pn:     7, x:  384, y:  354
 KILL, global_timer: 19840, addr: 217, ts_reg:   101, r_pn:     5, x:  393, y:  352
 KILL, global_timer: 19845, addr:  77, ts_reg:   101, r_pn:     3, x:  409, y:  349
-KILL, global_timer: 19870, addr: 208, ts_reg:   101, r_pn:     0, x:  388, y:  353
+KILL, global_timer: 19870, addr: 208, ts_reg:   101, r_pn:    20, x:  388, y:  353
 KILL, global_timer: 19895, addr: 163, ts_reg:   101, r_pn:     9, x:  382, y:  354
 KILL, global_timer: 19896, addr: 159, ts_reg:   101, r_pn:     9, x:  387, y:  353
 KILL, global_timer: 19940, addr:  52, ts_reg:   101, r_pn:    11, x:  391, y:  352
@@ -3881,7 +3880,7 @@ KILL, global_timer: 20028, addr:  67, ts_reg:   101, r_pn:     8, x:  380, y:  3
 KILL, global_timer: 20038, addr: 172, ts_reg:   101, r_pn:     1, x:  389, y:  351
 KILL, global_timer: 20044, addr:  37, ts_reg:   101, r_pn:     2, x:  409, y:  347
 KILL, global_timer: 20066, addr:  49, ts_reg:   101, r_pn:     7, x:  384, y:  353
-KILL, global_timer: 20074, addr:  46, ts_reg:   101, r_pn:    31, x:  388, y:  352
+KILL, global_timer: 20074, addr:  46, ts_reg:   101, r_pn:    20, x:  388, y:  352
 KILL, global_timer: 20074, addr:  21, ts_reg:   101, r_pn:     5, x:  392, y:  351
 KILL, global_timer: 20078, addr:  72, ts_reg:   101, r_pn:     3, x:  391, y:  351
 KILL, global_timer: 20103, addr: 253, ts_reg:   101, r_pn:     8, x:  387, y:  352
@@ -3898,7 +3897,7 @@ KILL, global_timer: 20237, addr: 194, ts_reg:   101, r_pn:     8, x:  381, y:  3
 KILL, global_timer: 20250, addr: 156, ts_reg:   101, r_pn:     6, x:  391, y:  350
 KILL, global_timer: 20255, addr: 196, ts_reg:   101, r_pn:     1, x:  408, y:  345
 KILL, global_timer: 20272, addr:  98, ts_reg:   101, r_pn:     7, x:  384, y:  352
-KILL, global_timer: 20277, addr:  81, ts_reg:   101, r_pn:    31, x:  388, y:  351
+KILL, global_timer: 20277, addr:  81, ts_reg:   101, r_pn:    20, x:  388, y:  351
 KILL, global_timer: 20306, addr: 188, ts_reg:   101, r_pn:     1, x:  383, y:  352
 KILL, global_timer: 20319, addr: 226, ts_reg:   101, r_pn:     7, x:  390, y:  350
 KILL, global_timer: 20325, addr:  59, ts_reg:   101, r_pn:     4, x:  409, y:  345
@@ -3913,7 +3912,7 @@ KILL, global_timer: 20420, addr: 141, ts_reg:   101, r_pn:     4, x:  392, y:  3
 KILL, global_timer: 20428, addr: 144, ts_reg:   101, r_pn:     2, x:  408, y:  344
 KILL, global_timer: 20448, addr:  33, ts_reg:   101, r_pn:     7, x:  385, y:  351
 KILL, global_timer: 20478, addr: 165, ts_reg:   101, r_pn:     4, x:  380, y:  352
-KILL, global_timer: 20487, addr: 130, ts_reg:   101, r_pn:     1, x:  388, y:  350
+KILL, global_timer: 20487, addr: 130, ts_reg:   101, r_pn:    20, x:  388, y:  350
 KILL, global_timer: 20513, addr:  17, ts_reg:   101, r_pn:     9, x:  381, y:  352
 KILL, global_timer: 20527, addr: 148, ts_reg:   101, r_pn:     1, x:  392, y:  348
 KILL, global_timer: 20527, addr:  35, ts_reg:   101, r_pn:     6, x:  390, y:  349
@@ -3927,7 +3926,7 @@ KILL, global_timer: 20595, addr: 231, ts_reg:   101, r_pn:    10, x:  391, y:  3
 KILL, global_timer: 20596, addr: 248, ts_reg:   101, r_pn:     1, x:  408, y:  342
 KILL, global_timer: 20614, addr:  79, ts_reg:   101, r_pn:     4, x:  379, y:  352
 KILL, global_timer: 20633, addr: 166, ts_reg:   101, r_pn:     2, x:  409, y:  342
-KILL, global_timer: 20664, addr:  86, ts_reg:   101, r_pn:     1, x:  388, y:  349
+KILL, global_timer: 20664, addr:  86, ts_reg:   101, r_pn:    20, x:  388, y:  349
 KILL, global_timer: 20665, addr: 179, ts_reg:   101, r_pn:     4, x:  393, y:  347
 KILL, global_timer: 20686, addr:  18, ts_reg:   101, r_pn:     8, x:  382, y:  351
 KILL, global_timer: 20686, addr: 245, ts_reg:   101, r_pn:     9, x:  385, y:  350
@@ -3943,7 +3942,7 @@ KILL, global_timer: 20822, addr: 244, ts_reg:   101, r_pn:     9, x:  380, y:  3
 KILL, global_timer: 20822, addr:  25, ts_reg:   101, r_pn:     9, x:  383, y:  350
 KILL, global_timer: 20843, addr:  74, ts_reg:   101, r_pn:     2, x:  408, y:  340
 KILL, global_timer: 20858, addr:  68, ts_reg:   101, r_pn:     5, x:  382, y:  350
-KILL, global_timer: 20866, addr: 125, ts_reg:   101, r_pn:    24, x:  388, y:  348
+KILL, global_timer: 20866, addr: 125, ts_reg:   101, r_pn:    20, x:  388, y:  348
 KILL, global_timer: 20867, addr: 106, ts_reg:   101, r_pn:     7, x:  387, y:  348
 KILL, global_timer: 20871, addr: 235, ts_reg:   101, r_pn:     5, x:  390, y:  347
 KILL, global_timer: 20871, addr: 108, ts_reg:   101, r_pn:     5, x:  393, y:  346
@@ -4030,7 +4029,7 @@ KILL, global_timer: 21886, addr:   3, ts_reg:   101, r_pn:     2, x:  378, y:  3
 KILL, global_timer: 21891, addr: 239, ts_reg:   101, r_pn:     8, x:  383, y:  345
 KILL, global_timer: 21891, addr: 203, ts_reg:   101, r_pn:     5, x:  384, y:  344
 KILL, global_timer: 21891, addr: 124, ts_reg:   101, r_pn:     6, x:  386, y:  343
-KILL, global_timer: 21897, addr:  37, ts_reg:   101, r_pn:    22, x:  388, y:  342
+KILL, global_timer: 21897, addr:  37, ts_reg:   101, r_pn:    20, x:  388, y:  342
 KILL, global_timer: 21902, addr: 137, ts_reg:   101, r_pn:    18, x:  391, y:  340
 KILL, global_timer: 21934, addr: 218, ts_reg:   101, r_pn:     2, x:  390, y:  340
 KILL, global_timer: 21958, addr: 209, ts_reg:   101, r_pn:     3, x:  383, y:  344
@@ -4150,7 +4149,7 @@ KILL, global_timer: 23137, addr:  91, ts_reg:   101, r_pn:     4, x:  387, y:  3
 KILL, global_timer: 23138, addr: 209, ts_reg:   101, r_pn:     1, x:  391, y:  329
 KILL, global_timer: 23139, addr: 129, ts_reg:   101, r_pn:    11, x:  392, y:  329
 KILL, global_timer: 23143, addr: 130, ts_reg:   101, r_pn:     3, x:  393, y:  328
-KILL, global_timer: 23160, addr:  52, ts_reg:   101, r_pn:    17, x:  363, y:  356
+KILL, global_timer: 23160, addr:  52, ts_reg:   101, r_pn:    20, x:  363, y:  356
 KILL, global_timer: 23166, addr: 253, ts_reg:   101, r_pn:    10, x:  381, y:  339
 KILL, global_timer: 23166, addr:  37, ts_reg:   101, r_pn:     7, x:  384, y:  336
 KILL, global_timer: 23178, addr: 224, ts_reg:   101, r_pn:     4, x:  392, y:  328
@@ -4215,7 +4214,7 @@ KILL, global_timer: 23697, addr:  96, ts_reg:   101, r_pn:     5, x:  392, y:  3
 KILL, global_timer: 23703, addr: 240, ts_reg:   101, r_pn:     1, x:  408, y:  305
 KILL, global_timer: 23707, addr: 174, ts_reg:   101, r_pn:     7, x:  412, y:  301
 KILL, global_timer: 23708, addr:  14, ts_reg:   101, r_pn:     1, x:  415, y:  297
-KILL, global_timer: 23719, addr:  70, ts_reg:   101, r_pn:     2, x:  362, y:  356
+KILL, global_timer: 23719, addr:  70, ts_reg:   101, r_pn:    20, x:  362, y:  356
 KILL, global_timer: 23720, addr: 115, ts_reg:   101, r_pn:     3, x:  377, y:  339
 KILL, global_timer: 23724, addr: 112, ts_reg:   101, r_pn:     5, x:  379, y:  337
 KILL, global_timer: 23728, addr: 161, ts_reg:   101, r_pn:     3, x:  384, y:  331
@@ -4274,7 +4273,7 @@ KILL, global_timer: 24036, addr: 147, ts_reg:   101, r_pn:    14, x:  408, y:  2
 KILL, global_timer: 24040, addr:  31, ts_reg:   101, r_pn:     2, x:  412, y:  294
 KILL, global_timer: 24040, addr: 202, ts_reg:   101, r_pn:     1, x:  411, y:  295
 KILL, global_timer: 24040, addr: 254, ts_reg:   101, r_pn:     2, x:  413, y:  293
-KILL, global_timer: 24045, addr:  62, ts_reg:   101, r_pn:    29, x:  360, y:  358
+KILL, global_timer: 24045, addr:  62, ts_reg:   101, r_pn:    20, x:  360, y:  358
 KILL, global_timer: 24052, addr:  94, ts_reg:   101, r_pn:     6, x:  378, y:  336
 KILL, global_timer: 24052, addr: 151, ts_reg:   101, r_pn:     3, x:  381, y:  332
 KILL, global_timer: 24058, addr: 197, ts_reg:   101, r_pn:     2, x:  384, y:  328
@@ -4307,7 +4306,7 @@ KILL, global_timer: 24183, addr: 170, ts_reg:   101, r_pn:     1, x:  409, y:  2
 KILL, global_timer: 24183, addr: 224, ts_reg:   101, r_pn:     1, x:  410, y:  293
 KILL, global_timer: 24191, addr: 209, ts_reg:   101, r_pn:     1, x:  409, y:  294
 KILL, global_timer: 24191, addr: 169, ts_reg:   101, r_pn:     2, x:  411, y:  292
-KILL, global_timer: 24197, addr:  73, ts_reg:   101, r_pn:    29, x:  363, y:  355
+KILL, global_timer: 24197, addr:  73, ts_reg:   101, r_pn:    20, x:  363, y:  355
 KILL, global_timer: 24197, addr: 159, ts_reg:   101, r_pn:     3, x:  376, y:  337
 KILL, global_timer: 24201, addr: 148, ts_reg:   101, r_pn:     9, x:  379, y:  334
 KILL, global_timer: 24201, addr: 174, ts_reg:   101, r_pn:     1, x:  382, y:  329
@@ -4475,7 +4474,7 @@ KILL, global_timer: 25222, addr: 181, ts_reg:   101, r_pn:     1, x:  408, y:  2
 KILL, global_timer: 25244, addr:  31, ts_reg:   101, r_pn:     7, x:  377, y:  326
 KILL, global_timer: 25256, addr: 184, ts_reg:   101, r_pn:     5, x:  391, y:  300
 KILL, global_timer: 25257, addr: 132, ts_reg:   101, r_pn:     3, x:  408, y:  267
-KILL, global_timer: 25274, addr:  58, ts_reg:   101, r_pn:    11, x:  362, y:  355
+KILL, global_timer: 25274, addr:  58, ts_reg:   101, r_pn:    20, x:  362, y:  355
 KILL, global_timer: 25282, addr:  83, ts_reg:   101, r_pn:     5, x:  380, y:  320
 KILL, global_timer: 25282, addr: 137, ts_reg:   101, r_pn:     5, x:  382, y:  316
 KILL, global_timer: 25287, addr: 142, ts_reg:   101, r_pn:     2, x:  387, y:  304
@@ -4571,7 +4570,7 @@ KILL, global_timer: 25757, addr: 113, ts_reg:   101, r_pn:     2, x:  388, y:  2
 KILL, global_timer: 25757, addr: 196, ts_reg:   101, r_pn:     2, x:  387, y:  293
 KILL, global_timer: 25757, addr: 174, ts_reg:   101, r_pn:     1, x:  390, y:  287
 KILL, global_timer: 25761, addr: 203, ts_reg:   101, r_pn:     2, x:  407, y:  246
-KILL, global_timer: 25777, addr:  81, ts_reg:   101, r_pn:    25, x:  362, y:  354
+KILL, global_timer: 25777, addr:  81, ts_reg:   101, r_pn:    20, x:  362, y:  354
 KILL, global_timer: 25781, addr:   7, ts_reg:   101, r_pn:     7, x:  373, y:  327
 KILL, global_timer: 25781, addr:  72, ts_reg:   101, r_pn:     4, x:  374, y:  325
 KILL, global_timer: 25781, addr:  94, ts_reg:   101, r_pn:     3, x:  375, y:  322
@@ -4645,7 +4644,7 @@ KILL, global_timer: 26147, addr: 214, ts_reg:   101, r_pn:     1, x:  387, y:  2
 KILL, global_timer: 26147, addr: 143, ts_reg:   101, r_pn:     1, x:  389, y:  275
 KILL, global_timer: 26147, addr: 148, ts_reg:   101, r_pn:     2, x:  390, y:  272
 KILL, global_timer: 26152, addr: 157, ts_reg:   101, r_pn:     2, x:  407, y:  223
-KILL, global_timer: 26170, addr: 229, ts_reg:   101, r_pn:    23, x:  362, y:  353
+KILL, global_timer: 26170, addr: 229, ts_reg:   101, r_pn:    20, x:  362, y:  353
 KILL, global_timer: 26170, addr:  55, ts_reg:   101, r_pn:     2, x:  371, y:  326
 KILL, global_timer: 26170, addr: 120, ts_reg:   101, r_pn:     6, x:  372, y:  324
 KILL, global_timer: 26170, addr: 197, ts_reg:   101, r_pn:     5, x:  373, y:  321
@@ -4781,7 +4780,7 @@ KILL, global_timer: 26728, addr: 174, ts_reg:   101, r_pn:     1, x:  406, y:  1
 KILL, global_timer: 26728, addr: 231, ts_reg:   101, r_pn:     1, x:  405, y:  177
 KILL, global_timer: 26728, addr:  80, ts_reg:   101, r_pn:     1, x:  406, y:  175
 KILL, global_timer: 26742, addr: 105, ts_reg:   101, r_pn:     1, x:  360, y:  356
-KILL, global_timer: 26742, addr: 147, ts_reg:   101, r_pn:    23, x:  361, y:  355
+KILL, global_timer: 26742, addr: 147, ts_reg:   101, r_pn:    20, x:  361, y:  355
 KILL, global_timer: 26750, addr:  27, ts_reg:   101, r_pn:     3, x:  368, y:  325
 KILL, global_timer: 26762, addr: 173, ts_reg:   101, r_pn:     2, x:  383, y:  265
 KILL, global_timer: 26762, addr:  73, ts_reg:   101, r_pn:     1, x:  387, y:  246
@@ -4835,7 +4834,7 @@ KILL, global_timer: 26951, addr:  76, ts_reg:   101, r_pn:     3, x:  387, y:  2
 KILL, global_timer: 26951, addr: 226, ts_reg:   101, r_pn:     1, x:  389, y:  221
 KILL, global_timer: 26951, addr: 234, ts_reg:   101, r_pn:     1, x:  390, y:  219
 KILL, global_timer: 26956, addr:  11, ts_reg:   101, r_pn:     2, x:  389, y:  220
-KILL, global_timer: 26969, addr:  12, ts_reg:   101, r_pn:    10, x:  361, y:  354
+KILL, global_timer: 26969, addr:  12, ts_reg:   101, r_pn:    20, x:  361, y:  354
 KILL, global_timer: 26978, addr: 233, ts_reg:   101, r_pn:     9, x:  368, y:  319
 KILL, global_timer: 26983, addr: 161, ts_reg:   101, r_pn:     2, x:  372, y:  299
 KILL, global_timer: 26983, addr: 165, ts_reg:   101, r_pn:     4, x:  374, y:  291
@@ -4884,7 +4883,7 @@ KILL, global_timer: 27171, addr: 102, ts_reg:   101, r_pn:     1, x:  388, y:  2
 KILL, global_timer: 27171, addr: 143, ts_reg:   101, r_pn:     1, x:  392, y:  179
 KILL, global_timer: 27171, addr:  92, ts_reg:   101, r_pn:     1, x:  414, y:   56
 KILL, global_timer: 27175, addr: 213, ts_reg:   101, r_pn:     1, x:  414, y:   54
-KILL, global_timer: 27191, addr: 242, ts_reg:   101, r_pn:     4, x:  361, y:  353
+KILL, global_timer: 27191, addr: 242, ts_reg:   101, r_pn:    20, x:  361, y:  353
 KILL, global_timer: 27197, addr: 219, ts_reg:   101, r_pn:     3, x:  368, y:  311
 KILL, global_timer: 27197, addr:  52, ts_reg:   101, r_pn:     4, x:  369, y:  306
 KILL, global_timer: 27197, addr:  69, ts_reg:   101, r_pn:     4, x:  370, y:  299
@@ -4919,7 +4918,7 @@ KILL, global_timer: 27314, addr: 164, ts_reg:   101, r_pn:     3, x:  378, y:  2
 KILL, global_timer: 27314, addr:  27, ts_reg:   101, r_pn:     1, x:  383, y:  209
 KILL, global_timer: 27314, addr:  28, ts_reg:   101, r_pn:     2, x:  387, y:  183
 KILL, global_timer: 27318, addr: 238, ts_reg:   101, r_pn:     1, x:  390, y:  162
-KILL, global_timer: 27338, addr: 223, ts_reg:   101, r_pn:    21, x:  361, y:  352
+KILL, global_timer: 27338, addr: 223, ts_reg:   101, r_pn:    20, x:  361, y:  352
 KILL, global_timer: 27343, addr: 106, ts_reg:   101, r_pn:     4, x:  367, y:  311
 KILL, global_timer: 27347, addr:  18, ts_reg:   101, r_pn:     5, x:  370, y:  290
 KILL, global_timer: 27348, addr: 150, ts_reg:   101, r_pn:     3, x:  374, y:  264
@@ -5064,11 +5063,11 @@ KILL, global_timer: 28215, addr: 178, ts_reg:   101, r_pn:     2, x:  360, y:  2
 KILL, global_timer: 28219, addr:  32, ts_reg:   101, r_pn:     2, x:  360, y:  242
 KILL, global_timer: 28219, addr: 245, ts_reg:   101, r_pn:     1, x:  360, y:  240
 KILL, global_timer: 28219, addr:  74, ts_reg:   101, r_pn:     1, x:  360, y:  229
-KILL, global_timer: 28244, addr:  66, ts_reg:   101, r_pn:    28, x:  360, y:  353
+KILL, global_timer: 28244, addr:  66, ts_reg:   101, r_pn:    20, x:  360, y:  353
 KILL, global_timer: 28251, addr:  31, ts_reg:   101, r_pn:     2, x:  360, y:  263
 KILL, global_timer: 28268, addr: 195, ts_reg:   101, r_pn:    11, x:  360, y:  355
 KILL, global_timer: 28268, addr: 105, ts_reg:   101, r_pn:    14, x:  360, y:  356
-KILL, global_timer: 28268, addr:  23, ts_reg:   101, r_pn:    11, x:  360, y:  354
+KILL, global_timer: 28268, addr:  23, ts_reg:   101, r_pn:    20, x:  360, y:  354
 KILL, global_timer: 28281, addr:  87, ts_reg:   101, r_pn:     2, x:  359, y:  289
 KILL, global_timer: 28281, addr: 200, ts_reg:   101, r_pn:     2, x:  359, y:  279
 KILL, global_timer: 28281, addr: 161, ts_reg:   101, r_pn:     1, x:  359, y:  263
@@ -5230,7 +5229,7 @@ KILL, global_timer: 29265, addr: 151, ts_reg:   101, r_pn:     1, x:  345, y:  2
 KILL, global_timer: 29265, addr:   4, ts_reg:   101, r_pn:     1, x:  343, y:  265
 KILL, global_timer: 29271, addr:  82, ts_reg:   101, r_pn:     1, x:  333, y:  208
 KILL, global_timer: 29271, addr:  91, ts_reg:   101, r_pn:     1, x:  335, y:  221
-KILL, global_timer: 29291, addr: 146, ts_reg:   101, r_pn:    31, x:  359, y:  353
+KILL, global_timer: 29291, addr: 146, ts_reg:   101, r_pn:    20, x:  359, y:  353
 KILL, global_timer: 29296, addr:  66, ts_reg:   101, r_pn:     3, x:  352, y:  316
 KILL, global_timer: 29296, addr: 107, ts_reg:   101, r_pn:     3, x:  351, y:  311
 KILL, global_timer: 29296, addr:  20, ts_reg:   101, r_pn:     3, x:  350, y:  306
@@ -5281,7 +5280,7 @@ KILL, global_timer: 29510, addr: 114, ts_reg:   101, r_pn:     1, x:  334, y:  2
 KILL, global_timer: 29510, addr: 207, ts_reg:   101, r_pn:     3, x:  327, y:  208
 KILL, global_timer: 29510, addr:  67, ts_reg:   101, r_pn:     1, x:  302, y:   96
 KILL, global_timer: 29514, addr: 156, ts_reg:   101, r_pn:     1, x:  297, y:   75
-KILL, global_timer: 29528, addr: 111, ts_reg:   101, r_pn:    28, x:  359, y:  354
+KILL, global_timer: 29528, addr: 111, ts_reg:   101, r_pn:    20, x:  359, y:  354
 KILL, global_timer: 29534, addr:  34, ts_reg:   101, r_pn:     3, x:  351, y:  320
 KILL, global_timer: 29535, addr: 190, ts_reg:   101, r_pn:     1, x:  348, y:  307
 KILL, global_timer: 29541, addr:  16, ts_reg:   101, r_pn:     3, x:  342, y:  281
@@ -5353,7 +5352,7 @@ KILL, global_timer: 29826, addr: 227, ts_reg:   101, r_pn:     1, x:  318, y:  2
 KILL, global_timer: 29827, addr:  24, ts_reg:   101, r_pn:     1, x:  306, y:  163
 KILL, global_timer: 29828, addr:  13, ts_reg:   101, r_pn:     1, x:  303, y:  151
 KILL, global_timer: 29829, addr:  46, ts_reg:   101, r_pn:     1, x:  277, y:   57
-KILL, global_timer: 29843, addr:  32, ts_reg:   101, r_pn:    26, x:  359, y:  355
+KILL, global_timer: 29843, addr:  32, ts_reg:   101, r_pn:    20, x:  359, y:  355
 KILL, global_timer: 29852, addr: 132, ts_reg:   101, r_pn:     6, x:  349, y:  320
 KILL, global_timer: 29852, addr:  93, ts_reg:   101, r_pn:     5, x:  348, y:  317
 KILL, global_timer: 29857, addr: 242, ts_reg:   101, r_pn:     4, x:  341, y:  292
@@ -5363,7 +5362,7 @@ KILL, global_timer: 29860, addr: 186, ts_reg:   101, r_pn:     1, x:  317, y:  2
 KILL, global_timer: 29864, addr: 156, ts_reg:   101, r_pn:     1, x:  306, y:  168
 KILL, global_timer: 29864, addr: 180, ts_reg:   101, r_pn:     1, x:  303, y:  158
 KILL, global_timer: 29864, addr: 181, ts_reg:   101, r_pn:     1, x:  274, y:   56
-KILL, global_timer: 29880, addr:  68, ts_reg:   101, r_pn:    23, x:  358, y:  352
+KILL, global_timer: 29880, addr:  68, ts_reg:   101, r_pn:    20, x:  358, y:  352
 KILL, global_timer: 29886, addr: 247, ts_reg:   101, r_pn:     4, x:  345, y:  307
 KILL, global_timer: 29886, addr:  72, ts_reg:   101, r_pn:     4, x:  343, y:  301
 KILL, global_timer: 29886, addr:  49, ts_reg:   101, r_pn:     1, x:  337, y:  281
@@ -5419,7 +5418,7 @@ KILL, global_timer: 30091, addr: 104, ts_reg:   101, r_pn:     2, x:  330, y:  2
 KILL, global_timer: 30095, addr:  82, ts_reg:   101, r_pn:     1, x:  310, y:  205
 KILL, global_timer: 30095, addr: 251, ts_reg:   101, r_pn:     1, x:  304, y:  189
 KILL, global_timer: 30095, addr:  69, ts_reg:   101, r_pn:     2, x:  286, y:  131
-KILL, global_timer: 30113, addr:  19, ts_reg:   101, r_pn:    11, x:  358, y:  353
+KILL, global_timer: 30113, addr:  19, ts_reg:   101, r_pn:    20, x:  358, y:  353
 KILL, global_timer: 30117, addr: 131, ts_reg:   101, r_pn:     5, x:  346, y:  317
 KILL, global_timer: 30123, addr: 127, ts_reg:   101, r_pn:     2, x:  334, y:  282
 KILL, global_timer: 30123, addr:  53, ts_reg:   101, r_pn:     2, x:  322, y:  245
@@ -5533,7 +5532,7 @@ KILL, global_timer: 30577, addr: 151, ts_reg:   101, r_pn:     1, x:  306, y:  2
 KILL, global_timer: 30581, addr:  29, ts_reg:   101, r_pn:     3, x:  306, y:  229
 KILL, global_timer: 30581, addr: 211, ts_reg:   101, r_pn:     2, x:  303, y:  224
 KILL, global_timer: 30587, addr: 140, ts_reg:   101, r_pn:     2, x:  302, y:  221
-KILL, global_timer: 30599, addr:  63, ts_reg:   101, r_pn:    31, x:  358, y:  354
+KILL, global_timer: 30599, addr:  63, ts_reg:   101, r_pn:    20, x:  358, y:  354
 KILL, global_timer: 30608, addr: 197, ts_reg:   101, r_pn:     5, x:  341, y:  314
 KILL, global_timer: 30608, addr: 145, ts_reg:   101, r_pn:     3, x:  336, y:  303
 KILL, global_timer: 30613, addr:  86, ts_reg:   101, r_pn:     4, x:  328, y:  284
@@ -5630,7 +5629,7 @@ KILL, global_timer: 31006, addr: 187, ts_reg:   101, r_pn:     1, x:  306, y:  2
 KILL, global_timer: 31010, addr:  24, ts_reg:   101, r_pn:     1, x:  304, y:  248
 KILL, global_timer: 31010, addr:  89, ts_reg:   101, r_pn:     2, x:  302, y:  245
 KILL, global_timer: 31010, addr: 179, ts_reg:   101, r_pn:     1, x:  286, y:  212
-KILL, global_timer: 31032, addr:  39, ts_reg:   101, r_pn:    29, x:  357, y:  353
+KILL, global_timer: 31032, addr:  39, ts_reg:   101, r_pn:    20, x:  357, y:  353
 KILL, global_timer: 31037, addr: 231, ts_reg:   101, r_pn:     3, x:  340, y:  320
 KILL, global_timer: 31044, addr: 129, ts_reg:   101, r_pn:     3, x:  332, y:  304
 KILL, global_timer: 31044, addr: 216, ts_reg:   101, r_pn:     1, x:  328, y:  297
@@ -5645,7 +5644,7 @@ KILL, global_timer: 31083, addr: 239, ts_reg:   101, r_pn:     2, x:  306, y:  2
 KILL, global_timer: 31084, addr: 184, ts_reg:   101, r_pn:     1, x:  302, y:  248
 KILL, global_timer: 31085, addr: 113, ts_reg:   101, r_pn:     1, x:  304, y:  251
 KILL, global_timer: 31086, addr:  50, ts_reg:   101, r_pn:     1, x:  286, y:  216
-KILL, global_timer: 31101, addr:  70, ts_reg:   101, r_pn:    16, x:  358, y:  355
+KILL, global_timer: 31101, addr:  70, ts_reg:   101, r_pn:    20, x:  358, y:  355
 KILL, global_timer: 31118, addr: 230, ts_reg:   101, r_pn:     2, x:  314, y:  271
 KILL, global_timer: 31118, addr: 150, ts_reg:   101, r_pn:     1, x:  306, y:  257
 KILL, global_timer: 31118, addr: 159, ts_reg:   101, r_pn:     1, x:  302, y:  249
@@ -5730,7 +5729,7 @@ KILL, global_timer: 31482, addr:  85, ts_reg:   101, r_pn:     1, x:  306, y:  2
 KILL, global_timer: 31482, addr:   2, ts_reg:   101, r_pn:     2, x:  302, y:  263
 KILL, global_timer: 31486, addr: 223, ts_reg:   101, r_pn:     1, x:  286, y:  236
 KILL, global_timer: 31486, addr: 192, ts_reg:   101, r_pn:     1, x:  286, y:  237
-KILL, global_timer: 31499, addr: 119, ts_reg:   101, r_pn:     0, x:  358, y:  356
+KILL, global_timer: 31499, addr: 119, ts_reg:   101, r_pn:    20, x:  358, y:  356
 KILL, global_timer: 31507, addr:  46, ts_reg:   101, r_pn:     2, x:  340, y:  327
 KILL, global_timer: 31507, addr:  53, ts_reg:   101, r_pn:     1, x:  339, y:  325
 KILL, global_timer: 31507, addr:  37, ts_reg:   101, r_pn:     5, x:  337, y:  321
@@ -5758,7 +5757,7 @@ KILL, global_timer: 31621, addr:  40, ts_reg:   101, r_pn:     1, x:  307, y:  2
 KILL, global_timer: 31622, addr: 213, ts_reg:   101, r_pn:     3, x:  306, y:  275
 KILL, global_timer: 31623, addr: 246, ts_reg:   101, r_pn:     1, x:  286, y:  242
 KILL, global_timer: 31626, addr: 191, ts_reg:   101, r_pn:     2, x:  286, y:  243
-KILL, global_timer: 31642, addr:  98, ts_reg:   101, r_pn:    30, x:  357, y:  354
+KILL, global_timer: 31642, addr:  98, ts_reg:   101, r_pn:    20, x:  357, y:  354
 KILL, global_timer: 31646, addr:  12, ts_reg:   101, r_pn:    12, x:  343, y:  332
 KILL, global_timer: 31646, addr: 226, ts_reg:   101, r_pn:     4, x:  340, y:  328
 KILL, global_timer: 31650, addr: 106, ts_reg:   101, r_pn:     3, x:  336, y:  322
@@ -5865,7 +5864,7 @@ KILL, global_timer: 32157, addr: 233, ts_reg:   101, r_pn:     6, x:  330, y:  3
 KILL, global_timer: 32161, addr: 224, ts_reg:   101, r_pn:     2, x:  322, y:  310
 KILL, global_timer: 32165, addr:  11, ts_reg:   101, r_pn:     1, x:  307, y:  290
 KILL, global_timer: 32169, addr:  45, ts_reg:   101, r_pn:     1, x:  286, y:  263
-KILL, global_timer: 32184, addr: 182, ts_reg:   101, r_pn:    12, x:  357, y:  355
+KILL, global_timer: 32184, addr: 182, ts_reg:   101, r_pn:    20, x:  357, y:  355
 KILL, global_timer: 32188, addr:   2, ts_reg:   101, r_pn:     6, x:  339, y:  332
 KILL, global_timer: 32195, addr: 130, ts_reg:   101, r_pn:     1, x:  322, y:  311
 KILL, global_timer: 32195, addr:  69, ts_reg:   101, r_pn:     3, x:  316, y:  303
@@ -5951,7 +5950,7 @@ KILL, global_timer: 32626, addr:  70, ts_reg:   101, r_pn:     3, x:  286, y:  2
 KILL, global_timer: 32648, addr: 168, ts_reg:   101, r_pn:     3, x:  337, y:  334
 KILL, global_timer: 32652, addr: 255, ts_reg:   101, r_pn:     5, x:  330, y:  326
 KILL, global_timer: 32659, addr:  31, ts_reg:   101, r_pn:     5, x:  306, y:  300
-KILL, global_timer: 32681, addr: 204, ts_reg:   101, r_pn:    30, x:  356, y:  355
+KILL, global_timer: 32681, addr: 204, ts_reg:   101, r_pn:    20, x:  356, y:  355
 KILL, global_timer: 32681, addr: 111, ts_reg:   101, r_pn:     8, x:  340, y:  337
 KILL, global_timer: 32687, addr: 217, ts_reg:   101, r_pn:     3, x:  335, y:  332
 KILL, global_timer: 32687, addr:  75, ts_reg:   101, r_pn:     3, x:  332, y:  329
@@ -6068,7 +6067,7 @@ KILL, global_timer: 33227, addr: 236, ts_reg:   101, r_pn:     2, x:  306, y:  3
 KILL, global_timer: 33231, addr: 253, ts_reg:   101, r_pn:     1, x:  289, y:  294
 KILL, global_timer: 33235, addr: 225, ts_reg:   101, r_pn:     8, x:  288, y:  293
 KILL, global_timer: 33240, addr: 234, ts_reg:   101, r_pn:     2, x:  285, y:  291
-KILL, global_timer: 33246, addr:  67, ts_reg:   101, r_pn:    29, x:  357, y:  356
+KILL, global_timer: 33246, addr:  67, ts_reg:   101, r_pn:    20, x:  357, y:  356
 KILL, global_timer: 33252, addr:  11, ts_reg:   101, r_pn:     7, x:  338, y:  339
 KILL, global_timer: 33253, addr:  28, ts_reg:   101, r_pn:     3, x:  332, y:  334
 KILL, global_timer: 33263, addr:  15, ts_reg:   101, r_pn:     6, x:  308, y:  312
@@ -6112,7 +6111,7 @@ KILL, global_timer: 33424, addr:  53, ts_reg:   101, r_pn:     2, x:  287, y:  2
 KILL, global_timer: 33424, addr: 136, ts_reg:   101, r_pn:     2, x:  286, y:  295
 KILL, global_timer: 33428, addr: 113, ts_reg:   101, r_pn:     2, x:  284, y:  294
 KILL, global_timer: 33435, addr:  23, ts_reg:   101, r_pn:     1, x:  357, y:  357
-KILL, global_timer: 33435, addr: 154, ts_reg:   101, r_pn:    26, x:  356, y:  356
+KILL, global_timer: 33435, addr: 154, ts_reg:   101, r_pn:    20, x:  356, y:  356
 KILL, global_timer: 33435, addr: 215, ts_reg:   101, r_pn:     5, x:  341, y:  343
 KILL, global_timer: 33435, addr: 252, ts_reg:   101, r_pn:     6, x:  340, y:  342
 KILL, global_timer: 33442, addr: 220, ts_reg:   101, r_pn:     2, x:  336, y:  339
@@ -6346,7 +6345,7 @@ KILL, global_timer: 34788, addr: 214, ts_reg:   101, r_pn:     7, x:  334, y:  3
 KILL, global_timer: 34788, addr:  16, ts_reg:   101, r_pn:     9, x:  332, y:  344
 KILL, global_timer: 34788, addr: 130, ts_reg:   101, r_pn:     5, x:  330, y:  343
 KILL, global_timer: 34794, addr:  50, ts_reg:   101, r_pn:     9, x:  325, y:  340
-KILL, global_timer: 34819, addr: 201, ts_reg:   101, r_pn:    30, x:  356, y:  357
+KILL, global_timer: 34819, addr: 201, ts_reg:   101, r_pn:    20, x:  356, y:  357
 KILL, global_timer: 34823, addr: 152, ts_reg:   101, r_pn:     2, x:  335, y:  346
 KILL, global_timer: 34836, addr: 205, ts_reg:   101, r_pn:     5, x:  312, y:  334
 KILL, global_timer: 34836, addr: 210, ts_reg:   101, r_pn:     6, x:  307, y:  331
@@ -6671,7 +6670,7 @@ KILL, global_timer: 37427, addr: 187, ts_reg:   101, r_pn:     3, x:  309, y:  3
 KILL, global_timer: 37458, addr: 231, ts_reg:   101, r_pn:     7, x:  324, y:  357
 KILL, global_timer: 37466, addr: 106, ts_reg:   101, r_pn:     3, x:  304, y:  356
 KILL, global_timer: 37466, addr: 201, ts_reg:   101, r_pn:    12, x:  307, y:  356
-KILL, global_timer: 37482, addr: 141, ts_reg:   101, r_pn:    22, x:  360, y:  359
+KILL, global_timer: 37482, addr: 141, ts_reg:   101, r_pn:    20, x:  360, y:  359
 KILL, global_timer: 37493, addr:  25, ts_reg:   101, r_pn:     5, x:  321, y:  357
 KILL, global_timer: 37493, addr:   9, ts_reg:   101, r_pn:     6, x:  318, y:  357
 KILL, global_timer: 37503, addr: 147, ts_reg:   101, r_pn:     5, x:  303, y:  356

@@ -144,7 +144,7 @@ class ExpireManagerRTL:
         if e.st == ST_OCCU and dt >= self.life_cycle:
             # 产生过期事件
             self.expired_events.append((e.kx, e.ky, cand_addr, e.pn))
-            # print(f"Expire Event: Point=({e.kx}, {e.ky}), Addr={cand_addr}, PN={e.pn}, Time={time_now}, DT={dt}")
+            print(f"Expire Event: Point=({e.kx}, {e.ky}), Addr={cand_addr}, PN={e.pn}, Time={time_now}, DT={dt}")
             # 写 tomb
             tables[table_id][bucket_id] = Entry(st=ST_TOMB, kx=0, ky=0, pn=0, ts=0)
 
@@ -248,7 +248,12 @@ class HashBucketTableSim:
             target_bucket = hashes[hit_idx]
             old_e = self.tables[target_table][target_bucket]
             
-            new_pn = mask_u(old_e.pn + 1, VN_WIDTH)
+            # 当 pn 等于 20 时，不再加 1，保持为 20
+            if old_e.pn == 20:
+                new_pn = 20
+            else:
+                new_pn = mask_u(old_e.pn + 1, VN_WIDTH)
+            
             out_pn = new_pn
             out_idx = self._pack_out_idx(target_table, target_bucket)
             
@@ -339,14 +344,14 @@ if __name__ == "__main__":
             if i % REPORT_INTERVAL == 0:
                 avg_pct_each = [x / sample_count for x in sum_pct_each]
                 avg_total_pct = sum_total_pct / sample_count
-                print(
-                    f"Points={i} Timer={sim.global_timer} | "
-                    f"Loads={loads} | "
-                    f"CurrPct={[round(x,1) for x in pct]}% | "
-                    f"AvgPct={[round(x,2) for x in avg_pct_each]}% | "
-                    f"AvgTotalPct={avg_total_pct:.2f}% | "
-                    f"Collisions={collisions}"
-                )
+                # print(
+                #     f"Points={i} Timer={sim.global_timer} | "
+                #     f"Loads={loads} | "
+                #     f"CurrPct={[round(x,1) for x in pct]}% | "
+                #     f"AvgPct={[round(x,2) for x in avg_pct_each]}% | "
+                #     f"AvgTotalPct={avg_total_pct:.2f}% | "
+                #     f"Collisions={collisions}"
+                # )
 
         avg_pct_each = [x / sample_count for x in sum_pct_each] if sample_count else [0.0] * NUM_TABLES
         avg_total_pct = sum_total_pct / sample_count if sample_count else 0.0

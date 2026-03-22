@@ -12,13 +12,14 @@ module pfn_layer #(
     // 从上一级模块接收单个点的接口
     input  wire                              s_axis_pfe_valid,
     input  wire [EXPAND_PT_DIM*PT_WIDTH-1:0] s_axis_pfe_data,
-    input  wire                              s_axis_pfe_last,   // 指示该点是否为当前 Voxel 的最后一个点
+    input  wire                              s_axis_pfe_last,     // 指示该点是否为当前 Voxel 的最后一个点
     // 最终池化后的输出
     output reg                               m_axis_out_valid,
-    output reg  [   OUT_PT_DIM*PT_WIDTH-1:0] m_axis_out_data
+    // output reg  [   OUT_PT_DIM*PT_WIDTH-1:0] m_axis_out_data
+    output wire                              m_axis_out_data_bit  // 仅用于仿真观察输出数据
 );
-    // reg [OUT_PT_DIM*PT_WIDTH-1:0] m_axis_out_data;
-    wire m_axis_out_data_bit = m_axis_out_data == {OUT_PT_DIM*PT_WIDTH{1'b1}} ? 1'b1 : 1'b0; // 仅用于仿真观察输出数据
+    reg [OUT_PT_DIM*PT_WIDTH-1:0] m_axis_out_data;
+    assign m_axis_out_data_bit = (m_axis_out_data == {OUT_PT_DIM*PT_WIDTH{1'b1}}) ? 1'b1 : 1'b0; // 仅用于仿真观察输出数据
 
     // 1. 权重与偏置 ROM (或者从 AXI 读取的寄存器)
     // 存放量化后的 Weight_fused, B_fused

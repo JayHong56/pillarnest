@@ -24,7 +24,6 @@ module hash_bucket_table #(
     input  wire                                                m_axis_expire_tready,
     output wire        [2*COORD_WIDTH+ADDR_WIDTH+VN_WIDTH-1:0] m_axis_expire_tdata    //22+7+5
 );
-
     localparam ST_EMPTY = 2'b00;
     localparam ST_OCCU = 2'b01;
     localparam ST_TOMB = 2'b10;
@@ -40,7 +39,6 @@ module hash_bucket_table #(
     wire [BUCKET_SLOT_WIDTH-1:0] shared_write_addr_slot = we0_b ? 2'd0 : we1_b ? 2'd1 : we2_b ? 2'd2 : we3_b ? 2'd3 : 2'd0;
     wire [ADDR_WIDTH-1:0] shared_write_addr = {shared_write_addr_bucket, shared_write_addr_slot};
     wire [ENTRY_WIDTH-1:0] rdata0_a, rdata1_a, rdata2_a, rdata3_a;
-
     hash_bucket_array #(
         .ENTRY_WIDTH(ENTRY_WIDTH),
         .BUCKETS    (BUCKETS),
@@ -400,7 +398,6 @@ module hash_bucket_table #(
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             kill_write               <= 1'b0;
-
             we0_b                    <= 0;
             we1_b                    <= 0;
             we2_b                    <= 0;
@@ -410,13 +407,11 @@ module hash_bucket_table #(
             wdata2_b                 <= 0;
             wdata3_b                 <= 0;
             shared_write_addr_bucket <= 0;
-
             busy                     <= 0;
             found                    <= 0;
             table_full               <= 0;
             out_idx                  <= 0;
             out_point_number         <= 0;
-
             rr_ptr                   <= 2'd0;
         end else begin
             // defaults
@@ -551,7 +546,7 @@ module hash_bucket_table #(
         end
     end
 
-`ifdef SYNTHESIS
+`ifndef SYNTHESIS
     hash_load_monitor #(
         .BUCKETS  (BUCKETS),
         .BUCKET_AW(BUCKET_AW),

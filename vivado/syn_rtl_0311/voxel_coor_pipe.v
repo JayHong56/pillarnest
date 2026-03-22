@@ -1,6 +1,6 @@
 module voxel_coor_pipe #(
-    parameter integer        BRAM_DATA_WIDTH          = 256,       // 4 * 64
-    parameter integer        BRAM_ADDR_WIDTH          = 10,        // 128pillar * 5brams
+    parameter integer        BRAM_DATA_WIDTH          = 640,       // 4 * 64
+    parameter integer        BRAM_ADDR_WIDTH          = 9,         // 128pillar * 5brams
     parameter integer        AXIS_DATA_WIDTH          = 128,
     parameter integer        AXIS_ADDR_WIDTH          = 16,
     parameter integer        HASH_ADDR_WIDTH          = 8,         // log2(HASH_TABLE_SIZE)
@@ -35,12 +35,14 @@ module voxel_coor_pipe #(
 
     localparam integer PT_WIDTH_I = 8;
     localparam integer PT_WIDTH_F = 8;
+    localparam integer PT_WIDTH = PT_WIDTH_I + PT_WIDTH_F;  // 16
     localparam integer PT_WIDTH_FLOAT32 = 32;
     localparam integer VOXEL_WIDTH = 11;
 
     localparam [23:0] MAX_VOXEL_NUM = 24'd20;  // 每体素最多 20 点
     localparam integer VN_WIDTH = 5;  // 点编号宽度（hash 表输出 1..）
-    localparam integer EXPEND_VOXEL_ROW = (MAX_VOXEL_NUM >> 2);  // 20/4=5
+    localparam integer POINTS_PER_ROW = BRAM_DATA_WIDTH / (4 * PT_WIDTH);  // 640/64 = 10
+    localparam integer EXPEND_VOXEL_ROW = (MAX_VOXEL_NUM + POINTS_PER_ROW - 1) / POINTS_PER_ROW;  // ceil(20/10)=2
 
     // BRAM clk/rst
     assign bram_clk = clk;
@@ -264,22 +266,20 @@ module voxel_coor_pipe #(
         end
     end
 
-    assign bram_wrdata = {4{pproc_d3}};
+    assign bram_wrdata = {POINTS_PER_ROW{pproc_d3}};
     // ------------------------------------------------------------
     // 7) BRAM 地址/槽位计算（修正：加入 (point_number-1)>>2 与 slot 0-based）
     // ------------------------------------------------------------
-    wire [BRAM_ADDR_WIDTH-1:0] bram_row_addr = (hash_out_idx * EXPEND_VOXEL_ROW) + (hash_out_point_number >> 2);  // +0..4
-    wire [1:0] bram_slot_idx = hash_out_point_number[1:0];  // 0..3
+    wire [BRAM_ADDR_WIDTH-1:0] bram_row_addr = (hash_out_idx * EXPEND_VOXEL_ROW) + (hash_out_point_number / POINTS_PER_ROW);
+    wire [1:0] bram_slot_idx = hash_out_point_number % POINTS_PER_ROW;  // 0..3
 
     function [BRAM_DATA_WIDTH/8-1:0] slot_bwen_64;
-        input [1:0] slot;
+        input [3:0] slot;
+        reg [BRAM_DATA_WIDTH/8-1:0] mask;
         begin
-            case (slot)
-                2'd0: slot_bwen_64 = 32'hFF000000;  // bytes [7:0]   -> bits [63:0]
-                2'd1: slot_bwen_64 = 32'h000000FF;  // bytes [15:8]  -> bits [127:64]
-                2'd2: slot_bwen_64 = 32'h0000FF00;  // bytes [23:16] -> bits [191:128]
-                2'd3: slot_bwen_64 = 32'h00FF0000;  // bytes [31:24] -> bits [255:192]
-            endcase
+            mask = {BRAM_DATA_WIDTH / 8{1'b0}};
+            mask[slot*8+:8] = 8'hFF;
+            slot_bwen_64 = mask;
         end
     endfunction
 

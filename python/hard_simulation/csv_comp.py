@@ -1,11 +1,12 @@
+# 比较硬件和软件仿真得到的voxel中的点个数是否一致
 import pandas as pd
 
 # 1. 读取两个 CSV 文件
 # 假设硬件数据的列名是 x, y, r_pn
-df_hw = pd.read_csv('merged_data.csv') 
+df_hw = pd.read_csv('merged_data_hard.csv') 
 
 # 假设 PyTorch 数据的列名是 x, y, value
-df_pt = pd.read_csv('output_voxel_simulation.csv') 
+df_pt = pd.read_csv('merged_data_sim.csv') 
 
 # 为了方便区分，我们在合并前统一一下目标值的列名，或者直接合并
 # 这里我们假设 df_hw 的值列叫 'r_pn'，df_pt 的值列叫 'value'
@@ -28,7 +29,7 @@ print(merged_df.head(10)) # 打印前 10 行看看
 
 # 统计有多少个坐标点的值是不一致的
 diff_count = len(merged_df[merged_df['is_equal'] == False])
-print(f"\n共有 {len(merged_df)} 个匹配的坐标点。")
+print(f"\n共有 {len(merged_df)} 个匹配的Voxel。")
 print(f"其中有 {diff_count} 个点的值不一致。")
 
 # 5. (可选) 找出不一致的数据并保存为新的 CSV

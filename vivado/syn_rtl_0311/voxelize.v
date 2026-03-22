@@ -5,12 +5,13 @@ module voxelize #(
     parameter integer DRAM_ADDR_WIDTH = 16,
     parameter integer AXIS_DATA_WIDTH = 128,
     parameter integer AXIS_ADDR_WIDTH = 16,
-    parameter integer BRAM_DATA_WIDTH = 256,  // 64bit * 4points
-    parameter integer BRAM_ADDR_WIDTH = 10    // 128pillar * 5brams
+    parameter integer BRAM_DATA_WIDTH = 640,  // 64bit * 4points
+    parameter integer BRAM_ADDR_WIDTH = 9    // HASH_VOXEL_NUMBER(256) * 2brams
 ) (
-    input  wire          clk,
-    input  wire          rst_n,
-    output wire [16-1:0] m_axis_end_data_part
+    input  wire clk_p,
+    input  wire clk_n,
+    input  wire rst_n,
+    output wire m_axis_end_data_bit
 );
     reg                            dram_read_en = 1'b1;
     reg                            dram_write_en = 1'b0;
@@ -23,7 +24,7 @@ module voxelize #(
         .MEM_FILE       ("E:\\verilog\\pillarnest\\rtl\\.pointcloud\\points_bits_128.txt"),
         .MEM_FILE_LENGTH(34752)
     ) u_pointcloud_dram (
-        .clk          (clk),
+        .clk          (clk_p),
         .rst_n        (rst_n),
         .en           (dram_read_en),
         .we           (dram_write_en),
@@ -46,7 +47,7 @@ module voxelize #(
         .USE_KEEP         (0),
         .USER_DEPTH       (1)
     ) u_adapter_ram_2_axi_stream (
-        .clk              (clk),
+        .clk              (clk_p),
         .rst_n            (rst_n),
         //Ping Poing FIFO Read Interface
         .i_axis_user      (),
@@ -99,7 +100,7 @@ module voxelize #(
         .PRE_LAT                 (PRE_LAT),
         .LIFE_CYCLE              (LIFE_CYCLE)
     ) voxel_coordinate_inst (
-        .clk                 (clk),
+        .clk                 (clk_p),
         .rst_n               (rst_n),
         // AXI Stream Slave (Input)
         .s_axis_dram_data    (m_axis_dram_data),
@@ -137,7 +138,7 @@ module voxelize #(
         .BRAM_DATA_WIDTH(BRAM_DATA_WIDTH),
         .BRAM_ADDR_WIDTH(BRAM_ADDR_WIDTH)
     ) u_pfe (
-        .clk                 (clk),
+        .clk                 (clk_p),
         .rst_n               (rst_n),
         .s_axis_expire_tvalid(m_axis_expire_tvalid),
         .s_axis_expire_tready(m_axis_expire_tready),
@@ -154,8 +155,8 @@ module voxelize #(
 
     localparam WEIGHT_WIDTH = 16;
     localparam ACC_WIDTH = 32;
-    wire [PT_WIDTH*OUT_PT_DIM-1:0] m_axis_end_data;
-    assign m_axis_end_data_part = m_axis_end_data[16-1:0];
+    // wire [PT_WIDTH*OUT_PT_DIM-1:0] m_axis_end_data;
+    // assign m_axis_end_data_part = m_axis_end_data[16-1:0];
     pfn_layer #(
         .EXPAND_PT_DIM  (EXPAND_PT_DIM),
         .OUT_PT_DIM     (OUT_PT_DIM),
@@ -165,7 +166,7 @@ module voxelize #(
         .WEIGHT_WIDTH   (WEIGHT_WIDTH),
         .ACC_WIDTH      (ACC_WIDTH)
     ) u_pfn_layer (
-        .clk             (clk),
+        .clk             (clk_p),
         .rst_n           (rst_n),
         // 从上一级模块接收单个点的接口
         .s_axis_pfe_valid(m_axis_pfe_valid),
@@ -173,7 +174,7 @@ module voxelize #(
         .s_axis_pfe_last (m_axis_pfe_last),
         // 最终池化后的输出
         .m_axis_out_valid(),
-        .m_axis_out_data (m_axis_end_data)
+        .m_axis_out_data_bit (m_axis_end_data_bit)
     );
 
     dualport_bram #(
@@ -194,7 +195,7 @@ module voxelize #(
         .b_en  (bram_en_b),
         .b_bwen(1'b0),            // only read
         .b_addr(bram_addr_b),
-        .b_din (bram_addr_b),
+        .b_din (),
         .b_dout(bram_rdata_b)
     );
 

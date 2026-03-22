@@ -43,7 +43,7 @@ module hash_expire_manager #(
     wire [EW-1:0] fifo_out_data;
     hash_expire_fifo_sync #(  // fifo缓存expired事件等待PFN处理
         .WIDTH(EW),
-        .DEPTH(32)
+        .DEPTH(128)
     ) u_hash_expire_fifo_sync (
         .clk  (clk),
         .rst_n(rst_n),

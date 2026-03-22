@@ -1,6 +1,6 @@
 module voxel_coor_pipe #(
-    parameter integer        BRAM_DATA_WIDTH          = 256,       // 4 * 64
-    parameter integer        BRAM_ADDR_WIDTH          = 10,        // 128pillar * 5brams
+    parameter integer        BRAM_DATA_WIDTH          = 640,       // 4 * 64
+    parameter integer        BRAM_ADDR_WIDTH          = 9,         // 128pillar * 5brams
     parameter integer        AXIS_DATA_WIDTH          = 128,
     parameter integer        AXIS_ADDR_WIDTH          = 16,
     parameter integer        HASH_ADDR_WIDTH          = 8,         // log2(HASH_TABLE_SIZE)
@@ -21,30 +21,47 @@ module voxel_coor_pipe #(
     input  wire                         s_axis_dram_valid,
     output wire                         s_axis_dram_ready,
     // BRAM Native Interface
-    output wire                         bram_clk,
-    output wire                         bram_rst,
-    output reg                          bram_wr,
-    output reg  [BRAM_DATA_WIDTH/8-1:0] bram_bwen,             // 32-bit Byte Enable
-    output reg  [  BRAM_ADDR_WIDTH-1:0] bram_addr,             // 10-bit Address
-    output wire [  BRAM_DATA_WIDTH-1:0] bram_wrdata,           // 256-bit Data
+    output wire                         bram_voxelpoint_clk,
+    output wire                         bram_voxelpoint_rst,
+    output reg                          bram_voxelpoint_wr,
+    output reg  [BRAM_DATA_WIDTH/8-1:0] bram_voxelpoint_bwen,   // 32-bit Byte Enable
+    output reg  [  BRAM_ADDR_WIDTH-1:0] bram_voxelpoint_addr,   // 10-bit Address
+    output reg  [  BRAM_DATA_WIDTH-1:0] bram_voxelpoint_wrdata, // 256-bit Data
+
+    output wire                       bram_expire_clk_a,
+    // output wire                         bram_expire_rst_a,
+    // output wire                         bram_expire_wr_a,
+    // output wire [BRAM_DATA_WIDTH/8-1:0] bram_expire_bwen_a,   // 32-bit Byte Enable
+    output wire [BRAM_ADDR_WIDTH-1:0] bram_expire_addr_a,  // 10-bit Address
+    input  wire [BRAM_DATA_WIDTH-1:0] bram_expire_rdata_a, // 256-bit Data
+
+    output wire                         bram_expire_clk_b,
+    output wire                         bram_expire_rst_b,
+    output wire                         bram_expire_wr_b,
+    output wire [BRAM_DATA_WIDTH/8-1:0] bram_expire_bwen_b,   // 32-bit Byte Enable
+    output wire [  BRAM_ADDR_WIDTH-1:0] bram_expire_addr_b,   // 10-bit Address
+    output wire [  BRAM_DATA_WIDTH-1:0] bram_expire_wrdata_b, // 256-bit Data
+
     // AXI-Stream out (expire voxel coordinates)
-    output wire                         m_axis_expire_tvalid,
-    input  wire                         m_axis_expire_tready,
-    output wire [           22+7+5-1:0] m_axis_expire_tdata
+    output wire                            m_axis_expire_tvalid,
+    input  wire                            m_axis_expire_tready,
+    output wire [22+BRAM_ADDR_WIDTH+5-1:0] m_axis_expire_tdata
 );
 
     localparam integer PT_WIDTH_I = 8;
     localparam integer PT_WIDTH_F = 8;
+    localparam integer PT_WIDTH = PT_WIDTH_I + PT_WIDTH_F;  // 16
     localparam integer PT_WIDTH_FLOAT32 = 32;
     localparam integer VOXEL_WIDTH = 11;
 
     localparam [23:0] MAX_VOXEL_NUM = 24'd20;  // 每体素最多 20 点
     localparam integer VN_WIDTH = 5;  // 点编号宽度（hash 表输出 1..）
-    localparam integer EXPEND_VOXEL_ROW = (MAX_VOXEL_NUM >> 2);  // 20/4=5
+    localparam integer POINTS_PER_ROW = BRAM_DATA_WIDTH / (4 * PT_WIDTH);  // 640/64 = 10
+    localparam integer EXPEND_VOXEL_ROW = (MAX_VOXEL_NUM + POINTS_PER_ROW - 1) / POINTS_PER_ROW;  // ceil(20/10)=2
 
     // BRAM clk/rst
-    assign bram_clk = clk;
-    assign bram_rst = ~rst_n;
+    assign bram_voxelpoint_clk = clk;
+    assign bram_voxelpoint_rst = ~rst_n;
 
     wire                          hash_req_ready;
     wire                          hash_req_valid;
@@ -54,7 +71,11 @@ module voxel_coor_pipe #(
     reg  [PT_WIDTH_FLOAT32*4-1:0] point_raw_r;
     reg                           point_raw_vld;
     wire                          s_fire = s_axis_dram_valid && s_axis_dram_ready;
-    wire                          upstream_can_accept = !point_raw_vld || (!keep_point) || hash_fire;
+    // point_raw_val, keep_point, hash_fire
+    // 1/0 : 当前点不在有效范围内
+    // 0/? : 当前点无效，且没有新点进来，等待s_fire握手
+    // 1/1/0 : 当前点有效，但 hash 表未准备好
+    wire                          upstream_can_accept = (!point_raw_vld) || (!keep_point) || hash_fire;
     assign s_axis_dram_ready = upstream_can_accept;
 
     always @(posedge clk or negedge rst_n) begin
@@ -224,7 +245,9 @@ module voxel_coor_pipe #(
         .TIMER_WIDTH      (16),               // NOTE max 37650
         .ADDR_WIDTH       (HASH_ADDR_WIDTH),
         .BUCKETS          (64),
-        .BUCKET_SLOT_WIDTH(2)
+        .BUCKET_SLOT_WIDTH(2),
+        .BRAM_ADDR_WIDTH  (BRAM_ADDR_WIDTH),
+        .BRAM_DATA_WIDTH  (BRAM_DATA_WIDTH)
     ) u_hash_table_tombstone (
         .clk                 (clk),
         .rst_n               (rst_n),
@@ -234,9 +257,21 @@ module voxel_coor_pipe #(
         .key_y               (hash_key_y),
         .busy                (hash_busy),
         .found               (hash_found),
-        .out_idx             (hash_out_idx),
-        .out_point_number    (hash_out_point_number),
+        .out_idx             (hash_out_idx),           // 0-255
+        .out_point_number    (hash_out_point_number),  // 1-20
         .table_full          (hash_table_full),
+        .bram_expire_clk_a   (bram_expire_clk_a),
+        // .bram_expire_rst_a   (bram_expire_rst_a),
+        // .bram_expire_wr_a    (bram_expire_wr_a),
+        // .bram_expire_bwen_a  (bram_expire_bwen_a),     // 32-bit Byte Enable
+        .bram_expire_addr_a  (bram_expire_addr_a),     // 10-bit Address
+        .bram_expire_rdata_a (bram_expire_rdata_a),    // 256-bit Data
+        .bram_expire_clk_b   (bram_expire_clk_b),
+        .bram_expire_rst_b   (bram_expire_rst_b),
+        .bram_expire_wr_b    (bram_expire_wr_b),
+        .bram_expire_bwen_b  (bram_expire_bwen_b),     // 32-bit Byte Enable
+        .bram_expire_addr_b  (bram_expire_addr_b),     // 10-bit Address
+        .bram_expire_wrdata_b(bram_expire_wrdata_b),   // 256-bit Data
         .m_axis_expire_tready(m_axis_expire_tready),
         .m_axis_expire_tvalid(m_axis_expire_tvalid),
         .m_axis_expire_tdata (m_axis_expire_tdata)
@@ -264,42 +299,41 @@ module voxel_coor_pipe #(
         end
     end
 
-    assign bram_wrdata = {4{pproc_d3}};
     // ------------------------------------------------------------
     // 7) BRAM 地址/槽位计算（修正：加入 (point_number-1)>>2 与 slot 0-based）
     // ------------------------------------------------------------
-    wire [BRAM_ADDR_WIDTH-1:0] bram_row_addr = (hash_out_idx * EXPEND_VOXEL_ROW) + (hash_out_point_number >> 2);  // +0..4
-    wire [1:0] bram_slot_idx = hash_out_point_number[1:0];  // 0..3
+    wire [BRAM_ADDR_WIDTH-1:0] bram_row_addr = (hash_out_idx * EXPEND_VOXEL_ROW) + ((hash_out_point_number > POINTS_PER_ROW) ? {{(BRAM_ADDR_WIDTH-1){1'b0}}, 1'b1} : {(BRAM_ADDR_WIDTH-1){1'b0}});
+    wire [3:0] bram_slot_idx = (hash_out_point_number - {{(VN_WIDTH - 1) {1'b0}}, 1'b1}) % POINTS_PER_ROW;  // 0..3
 
     function [BRAM_DATA_WIDTH/8-1:0] slot_bwen_64;
-        input [1:0] slot;
+        input [3:0] slot;
+        reg [BRAM_DATA_WIDTH/8-1:0] mask;
         begin
-            case (slot)
-                2'd0: slot_bwen_64 = 32'hFF000000;  // bytes [7:0]   -> bits [63:0]
-                2'd1: slot_bwen_64 = 32'h000000FF;  // bytes [15:8]  -> bits [127:64]
-                2'd2: slot_bwen_64 = 32'h0000FF00;  // bytes [23:16] -> bits [191:128]
-                2'd3: slot_bwen_64 = 32'h00FF0000;  // bytes [31:24] -> bits [255:192]
-            endcase
+            mask = {BRAM_DATA_WIDTH / 8{1'b0}};
+            mask[slot*8+:8] = 8'hFF;
+            slot_bwen_64 = mask;
         end
     endfunction
 
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            bram_wr   <= 1'b0;
-            bram_bwen <= {BRAM_DATA_WIDTH / 8{1'b0}};
-            bram_addr <= {BRAM_ADDR_WIDTH{1'b0}};
+            bram_voxelpoint_wr <= 1'b0;
+            bram_voxelpoint_bwen <= {BRAM_DATA_WIDTH / 8{1'b0}};
+            bram_voxelpoint_wrdata <= {POINTS_PER_ROW{1'b0}};
+            bram_voxelpoint_addr <= {BRAM_ADDR_WIDTH{1'b0}};
         end else begin
-            bram_wr   <= 1'b0;
-            bram_bwen <= {BRAM_DATA_WIDTH / 8{1'b0}};
+            bram_voxelpoint_wr   <= 1'b0;
+            bram_voxelpoint_bwen <= {BRAM_DATA_WIDTH / 8{1'b0}};
             // 只有当 hash_busy 且我们确实在上一拍 pop 过（对齐）才写
             if (hash_busy && pproc_vld_d3) begin
                 // hash_found 表示 hit 或者新插入成功；table_full 时 found=0
                 // 同时加一个上限：每体素最多 20 点
                 if (hash_found  && (hash_out_point_number <= MAX_VOXEL_NUM[VN_WIDTH-1:0])
                                 && (hash_out_point_number != {VN_WIDTH{1'b0}})) begin
-                    bram_wr   <= 1'b1;
-                    bram_addr <= bram_row_addr;
-                    bram_bwen <= slot_bwen_64(bram_slot_idx);
+                    bram_voxelpoint_wr <= 1'b1;
+                    bram_voxelpoint_addr <= bram_row_addr;
+                    bram_voxelpoint_wrdata <= {POINTS_PER_ROW{pproc_d3}};
+                    bram_voxelpoint_bwen <= slot_bwen_64(bram_slot_idx);
                 end
             end
         end

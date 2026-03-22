@@ -1,3 +1,5 @@
+# 比较硬件和软件的哈希输出结果一致性
+
 import pandas as pd
 import sys
 import io
@@ -35,7 +37,7 @@ def load_data_robust(file_path):
 
 # 假设 load_data_robust 已经定义（见之前的回复）
 df1 = load_data_robust('E:\\verilog\\pillarnest\\output_simulation_old.txt')
-df2 = load_data_robust('E:\\verilog\\pillarnest\\python\\ssimulation_result.txt')
+df2 = load_data_robust('E:\\verilog\\pillarnest\\modelsim_pre\\ssimulation_result.txt')
 
 if df1 is not None and df2 is not None:
     # 核心操作：重置索引并横向合并

@@ -44,13 +44,16 @@ module hash_bucket_array #(
         .WIDTH(ENTRY_WIDTH),
         .DEPTH(BUCKETS)
     ) u_hash_bucket_bram0 (
-        .clk    (clk),
+        .clk_b  (clk),
+        .clk_a  (clk),
         .a_addr (a_addr_0),
         .a_we   (we0_a),
+        .a_en   (1'b1),
         .a_wdata(wdata0_a),
         .a_rdata(rdata0_a),
         .b_addr (b_addr),
         .b_we   (we0_b),
+        .b_en   (1'b1),
         .b_wdata(wdata0_b),
         .b_rdata(rdata0_b)
     );
@@ -59,13 +62,16 @@ module hash_bucket_array #(
         .WIDTH(ENTRY_WIDTH),
         .DEPTH(BUCKETS)
     ) u_hash_bucket_bram1 (
-        .clk    (clk),
+        .clk_b  (clk),
+        .clk_a  (clk),
         .a_addr (a_addr_1),
         .a_we   (we1_a),
+        .a_en   (1'b1),
         .a_wdata(wdata1_a),
         .a_rdata(rdata1_a),
         .b_addr (b_addr),
         .b_we   (we1_b),
+        .b_en   (1'b1),
         .b_wdata(wdata1_b),
         .b_rdata(rdata1_b)
     );
@@ -74,13 +80,16 @@ module hash_bucket_array #(
         .WIDTH(ENTRY_WIDTH),
         .DEPTH(BUCKETS)
     ) u_hash_bucket_bram2 (
-        .clk    (clk),
+        .clk_b  (clk),
+        .clk_a  (clk),
         .a_addr (a_addr_2),
         .a_we   (we2_a),
+        .a_en   (1'b1),
         .a_wdata(wdata2_a),
         .a_rdata(rdata2_a),
         .b_addr (b_addr),
         .b_we   (we2_b),
+        .b_en   (1'b1),
         .b_wdata(wdata2_b),
         .b_rdata(rdata2_b)
     );
@@ -89,13 +98,16 @@ module hash_bucket_array #(
         .WIDTH(ENTRY_WIDTH),
         .DEPTH(BUCKETS)
     ) u_hash_bucket_bram3 (
-        .clk    (clk),
+        .clk_b  (clk),
+        .clk_a  (clk),
         .a_addr (a_addr_3),
         .a_we   (we3_a),
+        .a_en   (1'b1),
         .a_wdata(wdata3_a),
         .a_rdata(rdata3_a),
         .b_addr (b_addr),
         .b_we   (we3_b),
+        .b_en   (1'b1),
         .b_wdata(wdata3_b),
         .b_rdata(rdata3_b)
     );
