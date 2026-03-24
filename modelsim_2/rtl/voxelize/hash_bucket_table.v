@@ -1,12 +1,15 @@
 module hash_bucket_table #(
-    parameter COORD_WIDTH       = 11,
-    parameter VN_WIDTH          = 5,                                     // point number width
-    parameter LIFE_CYCLE        = 16'd100,
-    parameter TIMER_WIDTH       = 16,
-    parameter ADDR_WIDTH        = 8,                                     // 9 -> 512 depths
-    parameter BUCKETS           = 64,
-    parameter BUCKET_SLOT_WIDTH = 2,                                     // 4 slots per bucket
-    parameter TABLE_SIZE        = BUCKETS * (1'b1 << BUCKET_SLOT_WIDTH)  // 256 slots
+    parameter         COORD_WIDTH       = 11,
+    parameter         VN_WIDTH          = 5,                                      // point number width
+    parameter         LIFE_CYCLE        = 16'd100,
+    parameter         TIMER_WIDTH       = 16,
+    parameter         ADDR_WIDTH        = 8,                                      // 9 -> 512 depths
+    parameter         MAX_VOXEL_NUM     = 16'd20,
+    parameter         BUCKETS           = 64,
+    parameter         BUCKET_SLOT_WIDTH = 2,                                      // 4 slots per bucket
+    parameter         TABLE_SIZE        = BUCKETS * (1'b1 << BUCKET_SLOT_WIDTH),  // 256 slots
+    parameter integer BRAM_DATA_WIDTH   = 640,                                    // 4 * 64
+    parameter integer BRAM_ADDR_WIDTH   = 9                                       // 128pillar * 5brams
 ) (
     input  wire                                                clk,
     input  wire                                                rst_n,
@@ -19,10 +22,22 @@ module hash_bucket_table #(
     output reg         [                       ADDR_WIDTH-1:0] out_idx,               // 0..255 = {bucket[5:0], way[1:0]}
     output reg         [                         VN_WIDTH-1:0] out_point_number,
     output reg                                                 table_full,
+    output wire                                                bram_expire_clk_a,
+    // output wire                                                bram_expire_rst_a,
+    // output wire                                                bram_expire_wr_a,
+    // output wire        [                BRAM_DATA_WIDTH/8-1:0] bram_expire_bwen_a,
+    output wire        [                  BRAM_ADDR_WIDTH-1:0] bram_expire_addr_a,
+    input  wire        [                  BRAM_DATA_WIDTH-1:0] bram_expire_rdata_a,
+    output wire                                                bram_expire_clk_b,
+    output wire                                                bram_expire_rst_b,
+    output wire                                                bram_expire_wr_b,
+    output wire        [                BRAM_DATA_WIDTH/8-1:0] bram_expire_bwen_b,
+    output wire        [                  BRAM_ADDR_WIDTH-1:0] bram_expire_addr_b,
+    output wire        [                  BRAM_DATA_WIDTH-1:0] bram_expire_wrdata_b,
     // axi-stream 
     output wire                                                m_axis_expire_tvalid,
     input  wire                                                m_axis_expire_tready,
-    output wire        [2*COORD_WIDTH+ADDR_WIDTH+VN_WIDTH-1:0] m_axis_expire_tdata    //22+7+5
+    output wire        [2*COORD_WIDTH+BRAM_ADDR_WIDTH+VN_WIDTH-1:0] m_axis_expire_tdata    //22+7+5
 );
     localparam ST_EMPTY = 2'b00;
     localparam ST_OCCU = 2'b01;
@@ -204,7 +219,7 @@ module hash_bucket_table #(
     wire bypass_en = did_write;
     reg delay_kill_write;
 
-    // 旁路命中：当 s1 正在看的某一路 bucket == 写回 bucket，并且该路的 slot == 写回 slot
+    // 旁路命中：主要解决连续查询同一个(x,y)点时，前一个写回还未完成但后一个查询已经到达s1阶段的情况
     wire bypass0 = bypass_en && (!delay_kill_write) && (s1_bucket_0 == shared_write_addr_bucket) && (shared_write_addr_slot == 2'd0);
     wire bypass1 = bypass_en && (!delay_kill_write) && (s1_bucket_1 == shared_write_addr_bucket) && (shared_write_addr_slot == 2'd1);
     wire bypass2 = bypass_en && (!delay_kill_write) && (s1_bucket_2 == shared_write_addr_bucket) && (shared_write_addr_slot == 2'd2);
@@ -238,6 +253,7 @@ module hash_bucket_table #(
     wire [ENTRY_WIDTH-1:0] kill_wdata;
     wire [ADDR_WIDTH-1:0] kill_addr = {kill_addr_bucket, kill_we_bucket};
     wire kill_expired;
+    wire [ADDR_WIDTH-1:0] kill_write_addr;
     hash_expire_manager #(
         .COORD_WIDTH      (COORD_WIDTH),
         .VN_WIDTH         (VN_WIDTH),
@@ -247,7 +263,9 @@ module hash_bucket_table #(
         .TABLE_SIZE       (TABLE_SIZE),
         .BUCKET_AW        (BUCKET_AW),
         .BUCKET_SLOT_WIDTH(BUCKET_SLOT_WIDTH),
-        .ENTRY_WIDTH      (2 + COORD_WIDTH + COORD_WIDTH + VN_WIDTH + TIMER_WIDTH)
+        .ENTRY_WIDTH      (2 + COORD_WIDTH + COORD_WIDTH + VN_WIDTH + TIMER_WIDTH),
+        .BRAM_ADDR_WIDTH  (BRAM_ADDR_WIDTH),
+        .BRAM_DATA_WIDTH  (BRAM_DATA_WIDTH)
     ) u_hash_expire_manager (
         .clk                 (clk),
         .rst_n               (rst_n),
@@ -262,6 +280,18 @@ module hash_bucket_table #(
         .b_we                (kill_we_bucket),
         .kill_valid          (kill_valid),
         .kill_expired        (kill_expired),
+        .bram_expire_clk_a   (bram_expire_clk_a),
+        // .bram_expire_rst_a   (bram_expire_rst_a),
+        // .bram_expire_wr_a    (bram_expire_wr_a),
+        // .bram_expire_bwen_a  (bram_expire_bwen_a),    // 32-bit Byte Enable
+        .bram_expire_addr_a  (bram_expire_addr_a),    // 10-bit Address
+        .bram_expire_rdata_a (bram_expire_rdata_a),   // 256-bit Data
+        .bram_expire_clk_b   (bram_expire_clk_b),
+        .bram_expire_rst_b   (bram_expire_rst_b),
+        .bram_expire_wr_b    (bram_expire_wr_b),
+        .bram_expire_bwen_b  (bram_expire_bwen_b),    // 32-bit Byte Enable
+        .bram_expire_addr_b  (bram_expire_addr_b),    // 10-bit Address
+        .bram_expire_wrdata_b(bram_expire_wrdata_b),  // 256-bit Data
         .m_axis_expire_tvalid(m_axis_expire_tvalid),
         .m_axis_expire_tready(m_axis_expire_tready),
         .m_axis_expire_tdata (m_axis_expire_tdata)
@@ -281,86 +311,7 @@ module hash_bucket_table #(
         (st[1] == ST_EMPTY || st[1] == ST_TOMB),
         (st[0] == ST_EMPTY || st[0] == ST_TOMB)
     };
-    always @(*) begin
-        hit     = 1'b0;
-        hit_way = 2'd0;
 
-        for (i = 0; i < 4; i = i + 1) begin
-            if (!hit && st[i] == ST_OCCU && kx[i] == s1_x && ky[i] == s1_y) begin
-                hit     = 1'b1;
-                hit_way = i[1:0];
-            end
-        end
-
-        free_found_rr = 1'b0;
-        free_way_rr   = 2'd0;
-
-        case (rr_ptr)
-            2'd0: begin
-                if (free_mask[0]) begin
-                    free_found_rr = 1'b1;
-                    free_way_rr   = 2'd0;
-                end else if (free_mask[1]) begin
-                    free_found_rr = 1'b1;
-                    free_way_rr   = 2'd1;
-                end else if (free_mask[2]) begin
-                    free_found_rr = 1'b1;
-                    free_way_rr   = 2'd2;
-                end else if (free_mask[3]) begin
-                    free_found_rr = 1'b1;
-                    free_way_rr   = 2'd3;
-                end
-            end
-            2'd1: begin
-                if (free_mask[1]) begin
-                    free_found_rr = 1'b1;
-                    free_way_rr   = 2'd1;
-                end else if (free_mask[2]) begin
-                    free_found_rr = 1'b1;
-                    free_way_rr   = 2'd2;
-                end else if (free_mask[3]) begin
-                    free_found_rr = 1'b1;
-                    free_way_rr   = 2'd3;
-                end else if (free_mask[0]) begin
-                    free_found_rr = 1'b1;
-                    free_way_rr   = 2'd0;
-                end
-            end
-            2'd2: begin
-                if (free_mask[2]) begin
-                    free_found_rr = 1'b1;
-                    free_way_rr   = 2'd2;
-                end else if (free_mask[3]) begin
-                    free_found_rr = 1'b1;
-                    free_way_rr   = 2'd3;
-                end else if (free_mask[0]) begin
-                    free_found_rr = 1'b1;
-                    free_way_rr   = 2'd0;
-                end else if (free_mask[1]) begin
-                    free_found_rr = 1'b1;
-                    free_way_rr   = 2'd1;
-                end
-            end
-            2'd3: begin
-                if (free_mask[3]) begin
-                    free_found_rr = 1'b1;
-                    free_way_rr   = 2'd3;
-                end else if (free_mask[0]) begin
-                    free_found_rr = 1'b1;
-                    free_way_rr   = 2'd0;
-                end else if (free_mask[1]) begin
-                    free_found_rr = 1'b1;
-                    free_way_rr   = 2'd1;
-                end else if (free_mask[2]) begin
-                    free_found_rr = 1'b1;
-                    free_way_rr   = 2'd2;
-                end
-            end
-        endcase
-
-        free_found = free_found_rr;
-        free_way   = free_way_rr;
-    end
 
     function [BUCKET_AW-1:0] addr_of_way;
         input [1:0] way;
@@ -374,10 +325,11 @@ module hash_bucket_table #(
         end
     endfunction
 
-    integer fp;  // 文件句柄
+    integer fp,fp2;  // 文件句柄
     initial begin
         // 1. 打开文件 ( "w" 表示覆盖写入, "a" 表示追加 )
         fp = $fopen("ssimulation_result.csv", "w");
+        fp2 = $fopen("ssimulation_result_killed.csv", "w");
 
         // 2. 写入表头 (可选)
         $fwrite(fp, "Key_X, Key_Y, Bucket_ID, Total_Load\n");
@@ -391,14 +343,20 @@ module hash_bucket_table #(
     assign action_hit  = s1_valid && hit && (!action_kill) && (!kill_write);
     assign action_free = s1_valid && (!hit) && free_found && (!action_kill) && (!kill_write);
     assign action_full = s1_valid && (!hit) && (!free_found) && (!action_kill) && (!kill_write);
-
     assign action_kill = kill_valid;
+
     reg signed [COORD_WIDTH-1:0] debug_s1_x, debug_s1_y;
+    assign kill_write_addr = action_hit ? {addr_of_way(
+        hit_way
+    ), hit_way} : action_free ? {addr_of_way(
+        free_way
+    ), free_way} : action_full ? {addr_of_way(
+        free_way_rr
+    ), free_way_rr} : {ADDR_WIDTH{1'b0}};
 
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             kill_write               <= 1'b0;
-
             we0_b                    <= 0;
             we1_b                    <= 0;
             we2_b                    <= 0;
@@ -408,13 +366,11 @@ module hash_bucket_table #(
             wdata2_b                 <= 0;
             wdata3_b                 <= 0;
             shared_write_addr_bucket <= 0;
-
             busy                     <= 0;
             found                    <= 0;
             table_full               <= 0;
             out_idx                  <= 0;
             out_point_number         <= 0;
-
             rr_ptr                   <= 2'd0;
         end else begin
             // defaults
@@ -431,25 +387,48 @@ module hash_bucket_table #(
                 found <= 1'b1;
                 out_idx <= {addr_of_way(hit_way), hit_way};
                 shared_write_addr_bucket <= addr_of_way(hit_way);
-                out_point_number <= pn[hit_way] + 1'b1;
-                case (hit_way)
-                    2'd0: begin
-                        we0_b <= 1;
-                        wdata0_b <= make_entry(ST_OCCU, s1_x, s1_y, pn[0] + 1'b1, global_timer);
-                    end
-                    2'd1: begin
-                        we1_b <= 1;
-                        wdata1_b <= make_entry(ST_OCCU, s1_x, s1_y, pn[1] + 1'b1, global_timer);
-                    end
-                    2'd2: begin
-                        we2_b <= 1;
-                        wdata2_b <= make_entry(ST_OCCU, s1_x, s1_y, pn[2] + 1'b1, global_timer);
-                    end
-                    2'd3: begin
-                        we3_b <= 1;
-                        wdata3_b <= make_entry(ST_OCCU, s1_x, s1_y, pn[3] + 1'b1, global_timer);
-                    end
-                endcase
+
+                if (pn[hit_way] == MAX_VOXEL_NUM) begin
+                    out_point_number <= pn[hit_way];
+                    case (hit_way)
+                        2'd0: begin
+                            we0_b <= 1;
+                            wdata0_b <= make_entry(ST_OCCU, s1_x, s1_y, pn[0], global_timer);
+                        end
+                        2'd1: begin
+                            we1_b <= 1;
+                            wdata1_b <= make_entry(ST_OCCU, s1_x, s1_y, pn[1], global_timer);
+                        end
+                        2'd2: begin
+                            we2_b <= 1;
+                            wdata2_b <= make_entry(ST_OCCU, s1_x, s1_y, pn[2], global_timer);
+                        end
+                        2'd3: begin
+                            we3_b <= 1;
+                            wdata3_b <= make_entry(ST_OCCU, s1_x, s1_y, pn[3], global_timer);
+                        end
+                    endcase
+                end else begin
+                    out_point_number <= pn[hit_way] + 1'b1;
+                    case (hit_way)
+                        2'd0: begin
+                            we0_b <= 1;
+                            wdata0_b <= make_entry(ST_OCCU, s1_x, s1_y, pn[0] + 1'b1, global_timer);
+                        end
+                        2'd1: begin
+                            we1_b <= 1;
+                            wdata1_b <= make_entry(ST_OCCU, s1_x, s1_y, pn[1] + 1'b1, global_timer);
+                        end
+                        2'd2: begin
+                            we2_b <= 1;
+                            wdata2_b <= make_entry(ST_OCCU, s1_x, s1_y, pn[2] + 1'b1, global_timer);
+                        end
+                        2'd3: begin
+                            we3_b <= 1;
+                            wdata3_b <= make_entry(ST_OCCU, s1_x, s1_y, pn[3] + 1'b1, global_timer);
+                        end
+                    endcase
+                end
                 debug_s1_x <= s1_x;
                 debug_s1_y <= s1_y;
 
@@ -549,6 +528,87 @@ module hash_bucket_table #(
         end
     end
 
+    always @(*) begin
+        hit     = 1'b0;
+        hit_way = 2'd0;
+
+        for (i = 0; i < 4; i = i + 1) begin
+            if (!hit && st[i] == ST_OCCU && kx[i] == s1_x && ky[i] == s1_y) begin
+                hit     = 1'b1;
+                hit_way = i[1:0];
+            end
+        end
+
+        free_found_rr = 1'b0;
+        free_way_rr   = 2'd0;
+
+        case (rr_ptr)
+            2'd0: begin
+                if (free_mask[0]) begin
+                    free_found_rr = 1'b1;
+                    free_way_rr   = 2'd0;
+                end else if (free_mask[1]) begin
+                    free_found_rr = 1'b1;
+                    free_way_rr   = 2'd1;
+                end else if (free_mask[2]) begin
+                    free_found_rr = 1'b1;
+                    free_way_rr   = 2'd2;
+                end else if (free_mask[3]) begin
+                    free_found_rr = 1'b1;
+                    free_way_rr   = 2'd3;
+                end
+            end
+            2'd1: begin
+                if (free_mask[1]) begin
+                    free_found_rr = 1'b1;
+                    free_way_rr   = 2'd1;
+                end else if (free_mask[2]) begin
+                    free_found_rr = 1'b1;
+                    free_way_rr   = 2'd2;
+                end else if (free_mask[3]) begin
+                    free_found_rr = 1'b1;
+                    free_way_rr   = 2'd3;
+                end else if (free_mask[0]) begin
+                    free_found_rr = 1'b1;
+                    free_way_rr   = 2'd0;
+                end
+            end
+            2'd2: begin
+                if (free_mask[2]) begin
+                    free_found_rr = 1'b1;
+                    free_way_rr   = 2'd2;
+                end else if (free_mask[3]) begin
+                    free_found_rr = 1'b1;
+                    free_way_rr   = 2'd3;
+                end else if (free_mask[0]) begin
+                    free_found_rr = 1'b1;
+                    free_way_rr   = 2'd0;
+                end else if (free_mask[1]) begin
+                    free_found_rr = 1'b1;
+                    free_way_rr   = 2'd1;
+                end
+            end
+            2'd3: begin
+                if (free_mask[3]) begin
+                    free_found_rr = 1'b1;
+                    free_way_rr   = 2'd3;
+                end else if (free_mask[0]) begin
+                    free_found_rr = 1'b1;
+                    free_way_rr   = 2'd0;
+                end else if (free_mask[1]) begin
+                    free_found_rr = 1'b1;
+                    free_way_rr   = 2'd1;
+                end else if (free_mask[2]) begin
+                    free_found_rr = 1'b1;
+                    free_way_rr   = 2'd2;
+                end
+            end
+        endcase
+
+        free_found = free_found_rr;
+        free_way   = free_way_rr;
+    end
+
 `ifndef SYNTHESIS
     hash_load_monitor #(
         .BUCKETS  (BUCKETS),
@@ -586,8 +646,8 @@ module hash_bucket_table #(
         end
 
         if (kill_valid) begin
-            // $fwrite(fp, "KILL, global_timer: %d, addr: %d, ts_reg: %d, r_pn: %d, x: %d, y: %d\n", global_timer, kill_addr, delay_1cycle_temp_0, delay_1cycle_temp_1, delay_1cycle_temp_2, delay_1cycle_temp_3);
-            cycle_count <= cycle_count + 1;
+            $fwrite(fp2, "KILL, global_timer: %d, addr: %d, ts_reg: %d, r_pn: %d, x: %d, y: %d\n", global_timer, kill_addr, delay_1cycle_temp_0, delay_1cycle_temp_1, delay_1cycle_temp_2, delay_1cycle_temp_3);
+            // cycle_count <= cycle_count + 1;
         end
     end
 

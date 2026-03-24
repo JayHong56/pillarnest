@@ -11,40 +11,39 @@ module hash_bucket_table #(
     parameter integer BRAM_DATA_WIDTH   = 640,                                    // 4 * 64
     parameter integer BRAM_ADDR_WIDTH   = 9                                       // 128pillar * 5brams
 ) (
-    input  wire                                                clk,
-    input  wire                                                rst_n,
-    input  wire                                                req_valid,
-    output wire                                                req_ready,
-    input  wire signed [                      COORD_WIDTH-1:0] key_x,
-    input  wire signed [                      COORD_WIDTH-1:0] key_y,
-    output reg                                                 busy,
-    output reg                                                 found,
-    output reg         [                       ADDR_WIDTH-1:0] out_idx,               // 0..255 = {bucket[5:0], way[1:0]}
-    output reg         [                         VN_WIDTH-1:0] out_point_number,
-    output reg                                                 table_full,
-    output wire                                                bram_expire_clk_a,
+    input wire clk,
+    input wire rst_n,
+    input wire req_valid,
+    output wire req_ready,
+    input wire signed [COORD_WIDTH-1:0] key_x,
+    input wire signed [COORD_WIDTH-1:0] key_y,
+    output reg busy,
+    output reg found,
+    output reg [ADDR_WIDTH-1:0] out_idx,  // 0..255 = {bucket[5:0], way[1:0]}
+    output reg [VN_WIDTH-1:0] out_point_number,
+    output reg table_full,
+    output wire bram_expire_clk_a,
     // output wire                                                bram_expire_rst_a,
     // output wire                                                bram_expire_wr_a,
     // output wire        [                BRAM_DATA_WIDTH/8-1:0] bram_expire_bwen_a,
-    output wire        [                  BRAM_ADDR_WIDTH-1:0] bram_expire_addr_a,
-    input  wire        [                  BRAM_DATA_WIDTH-1:0] bram_expire_rdata_a,
-    output wire                                                bram_expire_clk_b,
-    output wire                                                bram_expire_rst_b,
-    output wire                                                bram_expire_wr_b,
-    output wire        [                BRAM_DATA_WIDTH/8-1:0] bram_expire_bwen_b,
-    output wire        [                  BRAM_ADDR_WIDTH-1:0] bram_expire_addr_b,
-    output wire        [                  BRAM_DATA_WIDTH-1:0] bram_expire_wrdata_b,
+    output wire [BRAM_ADDR_WIDTH-1:0] bram_expire_addr_a,
+    input wire [BRAM_DATA_WIDTH-1:0] bram_expire_rdata_a,
+    output wire bram_expire_clk_b,
+    output wire bram_expire_rst_b,
+    output wire bram_expire_wr_b,
+    output wire [BRAM_DATA_WIDTH/8-1:0] bram_expire_bwen_b,
+    output wire [BRAM_ADDR_WIDTH-1:0] bram_expire_addr_b,
+    output wire [BRAM_DATA_WIDTH-1:0] bram_expire_wrdata_b,
     // axi-stream 
-    output wire                                                m_axis_expire_tvalid,
-    input  wire                                                m_axis_expire_tready,
-    output wire        [2*COORD_WIDTH+BRAM_ADDR_WIDTH+VN_WIDTH-1:0] m_axis_expire_tdata    //22+7+5
+    output wire m_axis_expire_tvalid,
+    input wire m_axis_expire_tready,
+    output wire [2*COORD_WIDTH+BRAM_ADDR_WIDTH+VN_WIDTH-1:0] m_axis_expire_tdata  //22+7+5
 );
     localparam ST_EMPTY = 2'b00;
     localparam ST_OCCU = 2'b01;
     localparam ST_TOMB = 2'b10;
     localparam BUCKET_AW = $clog2(BUCKETS);
     localparam ENTRY_WIDTH = 2 + COORD_WIDTH + COORD_WIDTH + VN_WIDTH + TIMER_WIDTH;
-
 
     reg [BUCKET_AW-1:0] a_addr_0, a_addr_1, a_addr_2, a_addr_3;
     wire [BUCKET_AW-1:0] a_addr_shadow;
@@ -186,17 +185,23 @@ module hash_bucket_table #(
     reg signed [COORD_WIDTH-1:0] s1_x, s1_y;
     reg [BUCKET_AW-1:0] s1_bucket_0, s1_bucket_1, s1_bucket_2, s1_bucket_3;
 
+
     wire kill_valid;
+    wire kill_expired;
     reg kill_write;
     wire action_hit;
     wire action_free;
     wire action_kill;
     wire action_full;
-    wire did_write = (action_hit | action_free) & (!kill_valid) & (!kill_write);
+    // action_hit/free 可以在 expired 有效，无法在valid、write有效
+    // 因为s0 s1状态机只能在write运转
+    wire did_write = (action_hit | action_free);
+    // wire did_write = busy & (!kill_valid) & (!kill_write);
     wire [ENTRY_WIDTH-1:0] main_write_data = (we0_b) ? wdata0_b :
                                         (we1_b) ? wdata1_b :
                                         (we2_b) ? wdata2_b :
                                         (we3_b) ? wdata3_b : {ENTRY_WIDTH{1'b0}};
+
     reg [TIMER_WIDTH-1:0] global_timer;
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) global_timer <= 0;
@@ -214,16 +219,68 @@ module hash_bucket_table #(
         end
     endfunction
 
+
+    // action_full crush
+    reg is_probing;
+    reg probe_wait;
+    reg [BUCKET_AW-1:0] probe_offset;
+    wire action_true_full = action_full && (probe_offset == {BUCKET_AW{1'b1}});  // 探测了一整圈依旧满
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            is_probing   <= 1'b0;
+            probe_wait   <= 1'b0;
+            probe_offset <= {BUCKET_AW{1'b0}};
+        end else begin
+            if (kill_valid || kill_expired) begin
+                // 被 kill 打断，复位探测状态
+                is_probing   <= 1'b0;
+                probe_wait   <= 1'b0;
+                probe_offset <= {BUCKET_AW{1'b0}};
+                
+            end else if (is_probing) begin
+                if (probe_wait) begin
+                    probe_wait <= 1'b0;  // BRAM 读取周期等待结束
+                end else begin
+                    if (action_hit || action_free) begin
+                        // 探测成功，退出探测模式
+                        is_probing   <= 1'b0;
+                        probe_offset <= {BUCKET_AW{1'b0}};
+                    end else if (action_full) begin
+                        if (probe_offset == {BUCKET_AW{1'b1}}) begin
+                            // 已经搜遍全表，真满，放弃探测
+                            is_probing   <= 1'b0;
+                            probe_offset <= {BUCKET_AW{1'b0}};
+                        end else begin
+                            // 仍满，继续探测下一个地址
+                            probe_wait   <= 1'b1;
+                            probe_offset <= probe_offset + 1'b1;
+                        end
+                    end
+                end
+
+            end else if (action_full && probe_offset != {BUCKET_AW{1'b1}}) begin
+                // 首次触发 action_full，启动探测
+                is_probing   <= 1'b1;
+                probe_wait   <= 1'b1;
+                probe_offset <= 1'b1;
+            end
+        end
+    end
+
+    // 动态叠加当前的偏移量，获取真实正在评价的 Bucket
+    wire [BUCKET_AW-1:0] eval_bucket_0 = s1_bucket_0 + probe_offset;
+    wire [BUCKET_AW-1:0] eval_bucket_1 = s1_bucket_1 + probe_offset;
+    wire [BUCKET_AW-1:0] eval_bucket_2 = s1_bucket_2 + probe_offset;
+    wire [BUCKET_AW-1:0] eval_bucket_3 = s1_bucket_3 + probe_offset;
     // ---------------- bypass (forwarding) ----------------
     // 只对“主写回”做旁路：did_write=1 时，shared_write_addr_bucket/slot 和 main_write_data 有效
-    wire bypass_en = did_write;
-    reg delay_kill_write;
+    // wire bypass_en = did_write;
 
     // 旁路命中：主要解决连续查询同一个(x,y)点时，前一个写回还未完成但后一个查询已经到达s1阶段的情况
-    wire bypass0 = bypass_en && (!delay_kill_write) && (s1_bucket_0 == shared_write_addr_bucket) && (shared_write_addr_slot == 2'd0);
-    wire bypass1 = bypass_en && (!delay_kill_write) && (s1_bucket_1 == shared_write_addr_bucket) && (shared_write_addr_slot == 2'd1);
-    wire bypass2 = bypass_en && (!delay_kill_write) && (s1_bucket_2 == shared_write_addr_bucket) && (shared_write_addr_slot == 2'd2);
-    wire bypass3 = bypass_en && (!delay_kill_write) && (s1_bucket_3 == shared_write_addr_bucket) && (shared_write_addr_slot == 2'd3);
+    wire bypass0 = busy && (!kill_write) && (eval_bucket_0 == shared_write_addr_bucket) && (shared_write_addr_slot == 2'd0);
+    wire bypass1 = busy && (!kill_write) && (eval_bucket_1 == shared_write_addr_bucket) && (shared_write_addr_slot == 2'd1);
+    wire bypass2 = busy && (!kill_write) && (eval_bucket_2 == shared_write_addr_bucket) && (shared_write_addr_slot == 2'd2);
+    wire bypass3 = busy && (!kill_write) && (eval_bucket_3 == shared_write_addr_bucket) && (shared_write_addr_slot == 2'd3);
 
     // 将读口数据在命中时替换为写回数据
     wire [ENTRY_WIDTH-1:0] rdata0_a_eff = bypass0 ? main_write_data : rdata0_a;
@@ -252,7 +309,6 @@ module hash_bucket_table #(
     wire [BUCKET_SLOT_WIDTH-1:0] kill_we_bucket;
     wire [ENTRY_WIDTH-1:0] kill_wdata;
     wire [ADDR_WIDTH-1:0] kill_addr = {kill_addr_bucket, kill_we_bucket};
-    wire kill_expired;
     wire [ADDR_WIDTH-1:0] kill_write_addr;
     hash_expire_manager #(
         .COORD_WIDTH      (COORD_WIDTH),
@@ -270,7 +326,7 @@ module hash_bucket_table #(
         .clk                 (clk),
         .rst_n               (rst_n),
         .write_commit        (did_write),
-        .write_addr          (out_idx),               // 0-255
+        .write_addr          (kill_write_addr),       // 0-255
         .time_now            (global_timer),
         .a_addr_shadow       (a_addr_shadow),
         .a_we_shadow         (a_we_shadow),
@@ -312,23 +368,103 @@ module hash_bucket_table #(
         (st[0] == ST_EMPTY || st[0] == ST_TOMB)
     };
 
-
     function [BUCKET_AW-1:0] addr_of_way;
         input [1:0] way;
         begin
             case (way)
-                2'd0: addr_of_way = s1_bucket_0;
-                2'd1: addr_of_way = s1_bucket_1;
-                2'd2: addr_of_way = s1_bucket_2;
-                2'd3: addr_of_way = s1_bucket_3;
+                2'd0: addr_of_way = eval_bucket_0;
+                2'd1: addr_of_way = eval_bucket_1;
+                2'd2: addr_of_way = eval_bucket_2;
+                2'd3: addr_of_way = eval_bucket_3;
             endcase
         end
     endfunction
 
-    integer fp,fp2;  // 文件句柄
+    always @(*) begin
+        hit     = 1'b0;
+        hit_way = 2'd0;
+
+        for (i = 0; i < 4; i = i + 1) begin
+            if (!hit && st[i] == ST_OCCU && kx[i] == s1_x && ky[i] == s1_y) begin
+                hit     = 1'b1;
+                hit_way = i[1:0];
+            end
+        end
+
+        free_found_rr = 1'b0;
+        free_way_rr   = 2'd0;
+
+        case (rr_ptr)
+            2'd0: begin
+                if (free_mask[0]) begin
+                    free_found_rr = 1'b1;
+                    free_way_rr   = 2'd0;
+                end else if (free_mask[1]) begin
+                    free_found_rr = 1'b1;
+                    free_way_rr   = 2'd1;
+                end else if (free_mask[2]) begin
+                    free_found_rr = 1'b1;
+                    free_way_rr   = 2'd2;
+                end else if (free_mask[3]) begin
+                    free_found_rr = 1'b1;
+                    free_way_rr   = 2'd3;
+                end
+            end
+            2'd1: begin
+                if (free_mask[1]) begin
+                    free_found_rr = 1'b1;
+                    free_way_rr   = 2'd1;
+                end else if (free_mask[2]) begin
+                    free_found_rr = 1'b1;
+                    free_way_rr   = 2'd2;
+                end else if (free_mask[3]) begin
+                    free_found_rr = 1'b1;
+                    free_way_rr   = 2'd3;
+                end else if (free_mask[0]) begin
+                    free_found_rr = 1'b1;
+                    free_way_rr   = 2'd0;
+                end
+            end
+            2'd2: begin
+                if (free_mask[2]) begin
+                    free_found_rr = 1'b1;
+                    free_way_rr   = 2'd2;
+                end else if (free_mask[3]) begin
+                    free_found_rr = 1'b1;
+                    free_way_rr   = 2'd3;
+                end else if (free_mask[0]) begin
+                    free_found_rr = 1'b1;
+                    free_way_rr   = 2'd0;
+                end else if (free_mask[1]) begin
+                    free_found_rr = 1'b1;
+                    free_way_rr   = 2'd1;
+                end
+            end
+            2'd3: begin
+                if (free_mask[3]) begin
+                    free_found_rr = 1'b1;
+                    free_way_rr   = 2'd3;
+                end else if (free_mask[0]) begin
+                    free_found_rr = 1'b1;
+                    free_way_rr   = 2'd0;
+                end else if (free_mask[1]) begin
+                    free_found_rr = 1'b1;
+                    free_way_rr   = 2'd1;
+                end else if (free_mask[2]) begin
+                    free_found_rr = 1'b1;
+                    free_way_rr   = 2'd2;
+                end
+            end
+        endcase
+
+        free_found = free_found_rr;
+        free_way   = free_way_rr;
+    end
+
+    integer fp, fp2;  // 文件句柄
     initial begin
         // 1. 打开文件 ( "w" 表示覆盖写入, "a" 表示追加 )
-        fp = $fopen("ssimulation_result.csv", "w");
+        fp  = $fopen("ssimulation_result.csv", "w");
         fp2 = $fopen("ssimulation_result_killed.csv", "w");
 
         // 2. 写入表头 (可选)
@@ -337,12 +473,14 @@ module hash_bucket_table #(
     end
 
     // -------- actions for current s1 (combinational) --------
-    assign req_ready   = !kill_write & !kill_valid & !kill_expired;  // 
+    wire pipe_stall = kill_valid | kill_expired | ((is_probing | action_full) & (!action_true_full));
+    assign req_ready   = !pipe_stall;  // 已修复：添加kill_write时，不能够正确阻塞前面的模块
 
     // -------- actions for current s1 (combinational) --------
-    assign action_hit  = s1_valid && hit && (!action_kill) && (!kill_write);
-    assign action_free = s1_valid && (!hit) && free_found && (!action_kill) && (!kill_write);
-    assign action_full = s1_valid && (!hit) && (!free_found) && (!action_kill) && (!kill_write);
+    // action_hit/free 可以在 expired 有效，无法在valid、write有效
+    assign action_hit  = s1_valid && (hit) && (!kill_valid) && (!kill_write) && (!probe_wait);
+    assign action_free = s1_valid && (!hit) && (free_found) && (!kill_valid) && (!kill_write) && (!probe_wait);
+    assign action_full = s1_valid && (!hit) && (!free_found) && (!kill_valid) && (!kill_write) && (!probe_wait);
     assign action_kill = kill_valid;
 
     reg signed [COORD_WIDTH-1:0] debug_s1_x, debug_s1_y;
@@ -350,7 +488,7 @@ module hash_bucket_table #(
         hit_way
     ), hit_way} : action_free ? {addr_of_way(
         free_way
-    ), free_way} : action_full ? {addr_of_way(
+    ), free_way} : action_true_full ? {addr_of_way(
         free_way_rr
     ), free_way_rr} : {ADDR_WIDTH{1'b0}};
 
@@ -460,7 +598,8 @@ module hash_bucket_table #(
                 debug_s1_x <= s1_x;
                 debug_s1_y <= s1_y;
 
-            end else if (action_full) begin
+            end else if (action_true_full) begin
+                // 🌟 修改：探了一整圈还是满，触发 true full 丢弃机制
                 table_full <= 1'b1;
             end
 
@@ -500,7 +639,7 @@ module hash_bucket_table #(
             s1_bucket_2 <= 0;
             s1_bucket_3 <= 0;
         end else begin
-            if (!kill_valid & !kill_expired) begin
+            if (!pipe_stall) begin
                 s1_valid    <= s0_valid;
                 s1_x        <= s0_x;
                 s1_y        <= s0_y;
@@ -524,89 +663,15 @@ module hash_bucket_table #(
                     a_addr_2    <= bucket_idx_2;
                     a_addr_3    <= bucket_idx_3;
                 end
+            end else if (action_full && !action_true_full) begin
+                // 探测模式：冻结时将地址进行累加探测
+                // 注意：此时 state machine 内部也在对 probe_offset 累加
+                a_addr_0 <= s1_bucket_0 + probe_offset + 1'b1;
+                a_addr_1 <= s1_bucket_1 + probe_offset + 1'b1;
+                a_addr_2 <= s1_bucket_2 + probe_offset + 1'b1;
+                a_addr_3 <= s1_bucket_3 + probe_offset + 1'b1;
             end
         end
-    end
-
-    always @(*) begin
-        hit     = 1'b0;
-        hit_way = 2'd0;
-
-        for (i = 0; i < 4; i = i + 1) begin
-            if (!hit && st[i] == ST_OCCU && kx[i] == s1_x && ky[i] == s1_y) begin
-                hit     = 1'b1;
-                hit_way = i[1:0];
-            end
-        end
-
-        free_found_rr = 1'b0;
-        free_way_rr   = 2'd0;
-
-        case (rr_ptr)
-            2'd0: begin
-                if (free_mask[0]) begin
-                    free_found_rr = 1'b1;
-                    free_way_rr   = 2'd0;
-                end else if (free_mask[1]) begin
-                    free_found_rr = 1'b1;
-                    free_way_rr   = 2'd1;
-                end else if (free_mask[2]) begin
-                    free_found_rr = 1'b1;
-                    free_way_rr   = 2'd2;
-                end else if (free_mask[3]) begin
-                    free_found_rr = 1'b1;
-                    free_way_rr   = 2'd3;
-                end
-            end
-            2'd1: begin
-                if (free_mask[1]) begin
-                    free_found_rr = 1'b1;
-                    free_way_rr   = 2'd1;
-                end else if (free_mask[2]) begin
-                    free_found_rr = 1'b1;
-                    free_way_rr   = 2'd2;
-                end else if (free_mask[3]) begin
-                    free_found_rr = 1'b1;
-                    free_way_rr   = 2'd3;
-                end else if (free_mask[0]) begin
-                    free_found_rr = 1'b1;
-                    free_way_rr   = 2'd0;
-                end
-            end
-            2'd2: begin
-                if (free_mask[2]) begin
-                    free_found_rr = 1'b1;
-                    free_way_rr   = 2'd2;
-                end else if (free_mask[3]) begin
-                    free_found_rr = 1'b1;
-                    free_way_rr   = 2'd3;
-                end else if (free_mask[0]) begin
-                    free_found_rr = 1'b1;
-                    free_way_rr   = 2'd0;
-                end else if (free_mask[1]) begin
-                    free_found_rr = 1'b1;
-                    free_way_rr   = 2'd1;
-                end
-            end
-            2'd3: begin
-                if (free_mask[3]) begin
-                    free_found_rr = 1'b1;
-                    free_way_rr   = 2'd3;
-                end else if (free_mask[0]) begin
-                    free_found_rr = 1'b1;
-                    free_way_rr   = 2'd0;
-                end else if (free_mask[1]) begin
-                    free_found_rr = 1'b1;
-                    free_way_rr   = 2'd1;
-                end else if (free_mask[2]) begin
-                    free_found_rr = 1'b1;
-                    free_way_rr   = 2'd2;
-                end
-            end
-        endcase
-
-        free_found = free_found_rr;
-        free_way   = free_way_rr;
     end
 
 `ifndef SYNTHESIS
@@ -642,11 +707,14 @@ module hash_bucket_table #(
             // %0t: 时间, %d: 十进制, %h: 十六进制
             // 这里的信号名要换成你模块里实际的信号
             // $fwrite(fp, "%d, %d, %d, %d\n", global_timer, debug_s1_x, debug_s1_y, out_idx);
-            $fwrite(fp, "%d, %d, %d, voxel_point: %d\n", debug_s1_x, debug_s1_y, out_idx, u_voxelpoint_bram.mem);
+            // $fwrite(fp, "%d, %d, %d, voxel_point: %d\n", debug_s1_x, debug_s1_y, out_idx, u_voxelpoint_bram.mem);
+            $fwrite(fp, "%d, %d, %d\n", s1_x, s1_y, kill_write_addr);
+
         end
 
         if (kill_valid) begin
-            $fwrite(fp2, "KILL, global_timer: %d, addr: %d, ts_reg: %d, r_pn: %d, x: %d, y: %d\n", global_timer, kill_addr, delay_1cycle_temp_0, delay_1cycle_temp_1, delay_1cycle_temp_2, delay_1cycle_temp_3);
+            $fwrite(fp2, "KILL, global_timer: %d, addr: %d, ts_reg: %d, r_pn: %d, x: %d, y: %d\n", global_timer, kill_addr,
+                    delay_1cycle_temp_0, delay_1cycle_temp_1, delay_1cycle_temp_2, delay_1cycle_temp_3);
             // cycle_count <= cycle_count + 1;
         end
     end
@@ -657,14 +725,6 @@ module hash_bucket_table #(
             delay_1cycle_temp_1 <= u_hash_expire_manager.r_pn;
             delay_1cycle_temp_2 <= u_hash_expire_manager.r_key_x;
             delay_1cycle_temp_3 <= u_hash_expire_manager.r_key_y;
-        end
-    end
-
-    always @(posedge clk or negedge rst_n) begin
-        if (!rst_n) begin
-            delay_kill_write <= 1'b0;
-        end else begin
-            delay_kill_write <= kill_write;
         end
     end
 `endif

@@ -60,6 +60,9 @@ add wave -noupdate -radix unsigned /tb_voxelize/dut/u_pfe/bram_pfe_addr
 add wave -noupdate /tb_voxelize/dut/u_pfe/pipe_stall
 add wave -noupdate /tb_voxelize/dut/voxel_coordinate_inst/pproc_d3
 add wave -noupdate /tb_voxelize/dut/voxel_coordinate_inst/point_proc_comb
+add wave -noupdate /tb_voxelize/dut/voxel_coordinate_inst/u_hash_table_tombstone/action_kill
+add wave -noupdate /tb_voxelize/dut/voxel_coordinate_inst/u_hash_table_tombstone/action_hit
+add wave -noupdate /tb_voxelize/dut/voxel_coordinate_inst/u_hash_table_tombstone/action_free
 TreeUpdate [SetDefaultTree]
 quietly WaveActivateNextPane
 add wave -noupdate /tb_voxelize/dut/u_pfe/st4_mean_x
@@ -106,9 +109,18 @@ add wave -noupdate /tb_voxelize/dut/voxel_coordinate_inst/u_hash_table_tombstone
 add wave -noupdate /tb_voxelize/dut/voxel_coordinate_inst/u_hash_table_tombstone/u_hash_expire_manager/bram_expire_wrdata_b
 add wave -noupdate /tb_voxelize/dut/voxel_coordinate_inst/u_hash_table_tombstone/u_hash_expire_manager/bram_expire_rdata_a
 add wave -noupdate -color Red -radix unsigned /tb_voxelize/dut/voxel_coordinate_inst/u_hash_table_tombstone/u_hash_expire_manager/bram_expire_addr_a
+add wave -noupdate /tb_voxelize/dut/voxel_coordinate_inst/u_hash_table_tombstone/u_hash_expire_manager/fifo_out_valid
+add wave -noupdate /tb_voxelize/dut/voxel_coordinate_inst/u_hash_table_tombstone/u_hash_expire_manager/fifo_out_ready
 add wave -noupdate -radix unsigned /tb_voxelize/dut/voxel_coordinate_inst/u_hash_table_tombstone/u_hash_expire_manager/s0_addr
+add wave -noupdate {/tb_voxelize/dut/u_pfe_bram/mem_2delay[6]}
+add wave -noupdate {/tb_voxelize/dut/u_pfe_bram/mem_2delay[5]}
+add wave -noupdate {/tb_voxelize/dut/u_pfe_bram/mem_2delay[4]}
+add wave -noupdate {/tb_voxelize/dut/u_pfe_bram/mem_2delay[3]}
+add wave -noupdate {/tb_voxelize/dut/u_pfe_bram/mem_2delay[2]}
+add wave -noupdate {/tb_voxelize/dut/u_pfe_bram/mem_2delay[1]}
+add wave -noupdate {/tb_voxelize/dut/u_pfe_bram/mem_2delay[0]}
 TreeUpdate [SetDefaultTree]
-WaveRestoreCursors {{Cursor 7} {949019 ps} 1} {{Cursor 8} {2131025 ps} 1} {{Cursor 9} {2053518 ps} 1} {{Cursor 11} {1435000 ps} 1} {{Cursor 12} {2020356 ps} 0}
+WaveRestoreCursors {{Cursor 7} {949019 ps} 1} {{Cursor 8} {2131025 ps} 1} {{Cursor 9} {2053518 ps} 1} {{Cursor 12} {1455000 ps} 1} {{Cursor 13} {106273251 ps} 0}
 quietly wave cursor active 5
 configure wave -namecolwidth 173
 configure wave -valuecolwidth 100
@@ -124,5 +136,5 @@ configure wave -griddelta 40
 configure wave -timeline 0
 configure wave -timelineunits us
 update
-WaveRestoreZoom {1924538 ps} {2056603 ps}
+WaveRestoreZoom {106251223 ps} {106349936 ps}
 bookmark add wave bookmark0 {{106113 ps} {197926 ps}} 0

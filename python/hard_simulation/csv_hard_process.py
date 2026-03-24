@@ -45,7 +45,7 @@ def hw_log_to_csv(input_txt_path, output_csv_path):
 # ================= 使用方法 =================
 # 1. 将 'hw_log.txt' 替换为你实际的 log 文本文件路径
 # 2. 将 'output_data.csv' 替换为你想要的输出文件名
-input_file = r'E:\verilog\pillarnest\modelsim_pre\ssimulation_result.txt'   
+input_file = r'E:\verilog\pillarnest\modelsim_pre\ssimulation_result_killed.csv'   
 output_file = 'output_voxel_hard.csv'
 
 hw_log_to_csv(input_file, output_file)

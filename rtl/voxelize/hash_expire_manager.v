@@ -39,9 +39,9 @@ module hash_expire_manager #(
     output reg  [  BRAM_DATA_WIDTH-1:0] bram_expire_wrdata_b,
 
     // ---- AXI-stream out (expired events) ----
-    output reg                                               m_axis_expire_tvalid,
+    output wire                                              m_axis_expire_tvalid,
     input  wire                                              m_axis_expire_tready,
-    output reg  [2*COORD_WIDTH+BRAM_ADDR_WIDTH+VN_WIDTH-1:0] m_axis_expire_tdata
+    output wire [2*COORD_WIDTH+BRAM_ADDR_WIDTH+VN_WIDTH-1:0] m_axis_expire_tdata
 );
     assign bram_expire_clk_a = clk;
     // assign bram_expire_rst_a = ~rst_n;
@@ -75,21 +75,21 @@ module hash_expire_manager #(
         .level()
     );
     assign fifo_out_ready = m_axis_expire_tready;
-    // assign m_axis_expire_tvalid = fifo_out_valid;
-    // assign m_axis_expire_tdata = fifo_out_data;
+    assign m_axis_expire_tvalid = fifo_out_valid;
+    assign m_axis_expire_tdata = fifo_out_data;
 
-    always @(posedge clk or negedge rst_n) begin
-        if (!rst_n) begin
-            m_axis_expire_tvalid <= 1'b0;
-            m_axis_expire_tdata  <= {EW{1'b0}};
-        end else if (fifo_out_valid) begin
-            m_axis_expire_tvalid <= fifo_out_valid;
-            m_axis_expire_tdata  <= fifo_out_data;
-        end else begin
-            m_axis_expire_tvalid <= 1'b0;
-            m_axis_expire_tdata  <= {EW{1'b0}};
-        end
-    end
+    // always @(posedge clk or negedge rst_n) begin
+    //     if (!rst_n) begin
+    //         m_axis_expire_tvalid <= 1'b0;
+    //         m_axis_expire_tdata  <= {EW{1'b0}};
+    //     end else if (fifo_out_valid) begin
+    //         m_axis_expire_tvalid <= fifo_out_valid;
+    //         m_axis_expire_tdata  <= fifo_out_data;
+    //     end else begin
+    //         m_axis_expire_tvalid <= 1'b0;
+    //         m_axis_expire_tdata  <= {EW{1'b0}};
+    //     end
+    // end
 
 
     localparam integer DQ_DEPTH = LIFE_CYCLE;
@@ -115,7 +115,7 @@ module hash_expire_manager #(
                 dq_mem[dq_wr_ptr] <= write_addr;
                 dq_wr_ptr <= (dq_wr_ptr == DQ_DEPTH - 1) ? {($clog2(DQ_DEPTH)) {1'b0}} : (dq_wr_ptr + 1'b1);
 
-                if (dq_count == DQ_DEPTH-1) begin  // 待在dq中的周期数为DQ_DEPTH，将对其处理（判断过期）
+                if (dq_count == DQ_DEPTH - 1) begin  // 待在dq中的周期数为DQ_DEPTH，将对其处理（判断过期）
                     cand_addr  <= dq_mem[dq_rd_ptr];
                     cand_valid <= 1'b1;
                     dq_rd_ptr  <= (dq_rd_ptr == DQ_DEPTH - 1) ? {($clog2(DQ_DEPTH)) {1'b0}} : (dq_rd_ptr + 1'b1);
@@ -138,7 +138,7 @@ module hash_expire_manager #(
             write_commit_delay <= 1'b1;
         end
     end
-    wire write_commit_delayed = write_commit | write_commit_delay;  // 延迟一个周期，确保地址稳定在write_addr上
+    wire write_commit_delayed = write_commit | write_commit_delay;  // 延迟一个周期，确保cand_valid/cand_addr稳定
     reg s0_valid;
     reg [ADDR_WIDTH-1:0] s0_addr;
     reg [TIMER_WIDTH-1:0] s0_time;
@@ -154,7 +154,6 @@ module hash_expire_manager #(
     wire [TIMER_WIDTH-1:0] r_ts;
 
     assign {r_status, r_key_x, r_key_y, r_pn, r_ts} = a_rdata_shadow;
-
 
     // fifo pop bram 2-stage pipeline
     always @(posedge clk or negedge rst_n) begin
@@ -172,7 +171,7 @@ module hash_expire_manager #(
             s1_valid <= s0_valid;
             s1_addr <= s0_addr;
             s1_time <= s0_time;
-            a_we_shadow <= s0_we;  // NOTE: shadow read enable inside the cycle after s0 is set
+            a_we_shadow <= s0_we;  // NOTE: 这里we信号要比addr晚一个周期给
 
             s0_valid <= cand_valid;
             s0_addr <= cand_addr;
@@ -184,13 +183,13 @@ module hash_expire_manager #(
             end
         end
     end
+
     localparam [23:0] MAX_VOXEL_NUM = 24'd20;  // 每体素最多 20 点
     localparam integer PT_WIDTH = 16;
     localparam integer POINTS_PER_ROW = BRAM_DATA_WIDTH / (4 * PT_WIDTH);  // 640/64 = 10
     localparam integer EXPEND_VOXEL_ROW = (MAX_VOXEL_NUM + POINTS_PER_ROW - 1) / POINTS_PER_ROW;  // ceil(20/10)=2
-
-    wire [TIMER_WIDTH-1:0] ts_reg = s1_valid ? (s1_time - r_ts) : {TIMER_WIDTH{1'b0}};
-    wire expired = (r_status == ST_OCCU) && (ts_reg > LIFE_CYCLE);
+    wire [TIMER_WIDTH-1:0] ts_reg = (s1_valid) ? (s1_time - r_ts) : {TIMER_WIDTH{1'b0}};
+    wire expired = (r_status == ST_OCCU) && (ts_reg >= LIFE_CYCLE);
     assign kill_expired = expired;
     // wire [BRAM_ADDR_WIDTH-1:0] bram_expire_row_addr = (s1_addr * EXPEND_VOXEL_ROW) + (r_pn / POINTS_PER_ROW);
     // assign bram_expire_addr_a = expired ? bram_expire_row_addr : {BRAM_ADDR_WIDTH{1'b0}};
@@ -250,7 +249,7 @@ module hash_expire_manager #(
     reg                       task_pop_reg;
     reg [BRAM_ADDR_WIDTH-1:0] bram_b_wr_ptr;  // BRAM B 的环形写指针
     reg [     ADDR_WIDTH-1:0] fsm_task_addr;  // 新增：用于暂存当前任务的基准地址
-
+    reg [BRAM_ADDR_WIDTH-1:0] task_base_ptr;
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             copy_st       <= ST_IDLE;
@@ -260,6 +259,7 @@ module hash_expire_manager #(
             fifo_in_data  <= {EW{1'b0}};
             task_pop_reg  <= 1'b0;
             fsm_task_addr <= {ADDR_WIDTH{1'b0}};
+            task_base_ptr <= {BRAM_ADDR_WIDTH{1'b0}};
         end else begin
             task_pop_reg  <= 1'b0;
             fifo_in_valid <= 1'b0;
@@ -276,10 +276,6 @@ module hash_expire_manager #(
                         // 2. 【关键修复】锁存当前地址，因为马上要 pop FIFO 了
                         fsm_task_addr <= task_addr;
 
-                        // 3. 通知 PFE
-                        fifo_in_valid <= 1'b1;
-                        fifo_in_data  <= {task_kx, task_ky, bram_b_wr_ptr, task_pn};
-
                         // 4. 【关键修复】提前拉高 pop_reg
                         // 这样在 ST_READ_R1 周期内 FIFO 就会执行 pop。
                         // 等下个周期回到 IDLE 时，task_empty 已经完美更新。
@@ -293,6 +289,10 @@ module hash_expire_manager #(
                     copy_st       <= ST_IDLE;
                     fsm_read_en   <= 1'b1;
 
+                    // 3. 通知 PFE
+                    fifo_in_valid <= 1'b1;
+                    fifo_in_data  <= {task_kx, task_ky, task_base_ptr, task_pn};
+                    task_base_ptr <= task_base_ptr + EXPEND_VOXEL_ROW[BRAM_ADDR_WIDTH-1:0];
                     // 【关键修复】使用上一拍锁存的 fsm_task_addr，而不是直连 FIFO 的线
                     fsm_read_addr <= (fsm_task_addr * EXPEND_VOXEL_ROW) + 1'b1;
                 end

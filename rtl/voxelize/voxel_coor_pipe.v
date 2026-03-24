@@ -288,7 +288,7 @@ module voxel_coor_pipe #(
             pproc_vld_d1 <= 1'b0;
             pproc_vld_d2 <= 1'b0;
             pproc_vld_d3 <= 1'b0;
-        end else begin
+        end else if (hash_req_ready) begin
             pproc_vld_d1 <= hash_fire;
             pproc_vld_d2 <= pproc_vld_d1;
             pproc_vld_d3 <= pproc_vld_d2;
@@ -303,7 +303,7 @@ module voxel_coor_pipe #(
     // 7) BRAM 地址/槽位计算（修正：加入 (point_number-1)>>2 与 slot 0-based）
     // ------------------------------------------------------------
     wire [BRAM_ADDR_WIDTH-1:0] bram_row_addr = (hash_out_idx * EXPEND_VOXEL_ROW) + ((hash_out_point_number > POINTS_PER_ROW) ? {{(BRAM_ADDR_WIDTH-1){1'b0}}, 1'b1} : {(BRAM_ADDR_WIDTH-1){1'b0}});
-    wire [3:0] bram_slot_idx = (hash_out_point_number - {{(VN_WIDTH - 1) {1'b0}}, 1'b1}) % POINTS_PER_ROW;  // 0..3
+    wire [3:0] bram_slot_idx = (hash_out_point_number - {{(VN_WIDTH-1) {1'b0}}, 1'b1}) % POINTS_PER_ROW;  // 0..3
 
     function [BRAM_DATA_WIDTH/8-1:0] slot_bwen_64;
         input [3:0] slot;
@@ -352,6 +352,11 @@ module voxel_coor_pipe #(
             end
         end
     end
+
+wire test_reg = (voxel_x == 36'd305 && voxel_y == 36'd359) ? 1'b1 : 1'b0;  // 用于调试特定坐标的点是否被处理
+
+
+
 `endif
 
 endmodule

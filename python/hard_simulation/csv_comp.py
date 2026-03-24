@@ -2,6 +2,13 @@
 import pandas as pd
 
 # 1. 读取两个 CSV 文件
+# # 假设硬件数据的列名是 x, y, r_pn
+# df_hw = pd.read_csv('merged_data_hard.csv') 
+
+# # 假设 PyTorch 数据的列名是 x, y, value
+# df_pt = pd.read_csv('merged_data_sim.csv') 
+
+
 # 假设硬件数据的列名是 x, y, r_pn
 df_hw = pd.read_csv('merged_data_hard.csv') 
 
