@@ -1,0 +1,4 @@
+weight_scale=1054.6154411778698
+bias_scale=1054.6154411778698
+in_features=11
+out_features=48

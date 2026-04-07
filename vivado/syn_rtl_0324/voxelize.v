@@ -1,0 +1,280 @@
+`timescale 1ps / 1ps
+
+module voxelize #(
+    parameter integer DRAM_DATA_WIDTH     = 128,
+    parameter integer DRAM_ADDR_WIDTH     = 16,
+    parameter integer AXIS_DATA_WIDTH     = 128,
+    parameter integer AXIS_ADDR_WIDTH     = 16,
+    parameter integer BRAM_DATA_WIDTH     = 640,  // 64bit * 4points
+    parameter integer BRAM_ADDR_WIDTH     = 9,    // HASH_VOXEL_NUMBER(256) * 2brams
+    parameter integer BRAM_ADDR_WIDTH_PFE = 7     // HASH_VOXEL_NUMBER(64) * 2brams
+
+) (
+    input wire clk_p,
+    input wire clk_n,
+    input wire rst_n,
+    output wire m_axis_out_data_bit
+);
+    reg                            dram_read_en = 1'b1;
+    reg                            dram_write_en = 1'b0;
+    wire [  DRAM_ADDR_WIDTH - 1:0] dram_write_size = (1 << DRAM_ADDR_WIDTH) - 1;
+    wire [(DRAM_ADDR_WIDTH - 1):0] dram_read_address;
+    wire [(DRAM_DATA_WIDTH - 1):0] dram_data_out;
+    dram #(
+        .DATA_WIDTH     (DRAM_DATA_WIDTH),
+        .ADDR_WIDTH     (DRAM_ADDR_WIDTH),                                                   // 65536 depth
+        .MEM_FILE       ("E:\\verilog\\pillarnest\\rtl\\.pointcloud\\points_bits_128.txt"),
+        .MEM_FILE_LENGTH(34752)
+    ) u_pointcloud_dram (
+        .clk          (clk_p),
+        .rst_n        (rst_n),
+        .en           (dram_read_en),
+        .we           (dram_write_en),
+        .write_address(),
+        .read_address (dram_read_address),
+        .data_in      (),
+        .data_out     (dram_data_out)
+    );
+
+
+    wire m_axis_dram_last;
+    wire [AXIS_DATA_WIDTH-1:0] m_axis_dram_data;
+    wire m_axis_dram_valid;
+    wire m_axis_dram_ready;
+    // axi stream 读fifo
+    adapter_ram_2_axi_stream #(
+        .AXIS_DATA_WIDTH  (AXIS_DATA_WIDTH),
+        .BRAM_DEPTH       (AXIS_ADDR_WIDTH),
+        .AXIS_STROBE_WIDTH(AXIS_DATA_WIDTH / 8),
+        .USE_KEEP         (0),
+        .USER_DEPTH       (1)
+    ) u_adapter_ram_2_axi_stream (
+        .clk              (clk_p),
+        .rst_n            (rst_n),
+        //Ping Poing FIFO Read Interface
+        .i_axis_user      (),
+        .i_bram_en        (dram_read_en),
+        .i_bram_size      (dram_write_size),
+        .o_bram_addr      (dram_read_address),
+        .i_bram_data      (dram_data_out),
+        //AXI Stream Output
+        .m_axis_dram_user (),
+        .m_axis_dram_ready(m_axis_dram_ready),
+        .m_axis_dram_data (m_axis_dram_data),
+        .m_axis_dram_last (m_axis_dram_last),
+        .m_axis_dram_valid(m_axis_dram_valid)
+    );
+
+
+    localparam COORD_WIDTH = 11;
+    localparam PT_WIDTH = 16;
+    localparam VN_WIDTH = 5;
+    localparam EXPAND_PT_DIM = 11;  // x,y,z,intensity,0,(x-mean,y-mean,z-mean,intensity-mean),(x-vmean,y-vmean,z-vmean,intensity-vmean)
+    localparam OUT_PT_DIM = 48;
+    localparam MAX_VOXEL_NUM = 12'd20;
+    localparam HASH_TABLE_SIZE = 256;
+    localparam HASH_ADDR_WIDTH = $clog2(HASH_TABLE_SIZE);  // log2(HASH_TABLE_SIZE)
+    localparam [15:0] THRESHOLD_CLOSE = 16'h0100;  // 1.00m
+    localparam [15:0] THRESHOLD_BOUDARY = 16'h3600;  // 54.00m
+    localparam [15:0] THRESHOLD_BOUDARY_Z_LOW = 16'h0500;  // -5m
+    localparam [15:0] THRESHOLD_BOUDARY_Z_HIGH = 16'h0300;  // +3m
+    localparam integer PRE_LAT = 0;  // 预处理固定延迟（拍数占位）
+    localparam [15:0] LIFE_CYCLE = 16'd100;
+    wire                                              bram_voxelpoint_clk;
+    wire                                              bram_voxelpoint_rst;
+    wire                                              bram_voxelpoint_wr;
+    wire [                     BRAM_DATA_WIDTH/8-1:0] bram_voxelpoint_bwen;  // 32-bit Byte Enable
+    wire [                       BRAM_ADDR_WIDTH-1:0] bram_voxelpoint_addr;  // 10-bit Address
+    wire [                       BRAM_DATA_WIDTH-1:0] bram_voxelpoint_wrdata;  // 256-bit Data
+    // expired 写入pfe buffer
+    wire                                              bram_expire_clk_a;
+    // wire                                              bram_expire_rst_a;
+    // wire                                              bram_expire_wr_a;
+    // wire [                     BRAM_DATA_WIDTH/8-1:0] bram_expire_bwen_a;  // 32-bit Byte Enable
+    wire [                       BRAM_ADDR_WIDTH-1:0] bram_expire_addr_a;  // 10-bit Address
+    wire [                       BRAM_DATA_WIDTH-1:0] bram_expire_rdata_a;  // 256-bit Data
+    // expired 读取voxelpoint
+    wire                                              bram_expire_clk_b;
+    wire                                              bram_expire_rst_b;
+    wire                                              bram_expire_wr_b;
+    wire [                     BRAM_DATA_WIDTH/8-1:0] bram_expire_bwen_b;  // 32-bit Byte Enable
+    wire [                       BRAM_ADDR_WIDTH-1:0] bram_expire_addr_b;  // 10-bit Address
+    wire [                       BRAM_DATA_WIDTH-1:0] bram_expire_wrdata_b;  // 256-bit Data
+    wire                                              bram_pfe_clk;
+    // wire                                              bram_pfe_rst_a;
+    // wire                                              bram_pfe_wr_a;
+    // wire [                     BRAM_DATA_WIDTH/8-1:0] bram_pfe_bwen_a;  // 32-bit Byte Enable
+    wire [                       BRAM_ADDR_WIDTH-1:0] bram_pfe_addr;  // 10-bit Address
+    wire [                       BRAM_DATA_WIDTH-1:0] bram_pfe_rdata;  // 256-bit Data
+
+    wire                                              m_axis_expire_tvalid;
+    wire                                              m_axis_expire_tready;
+    wire [2*COORD_WIDTH+BRAM_ADDR_WIDTH+VN_WIDTH-1:0] m_axis_expire_tdata;  // NOTE
+    voxel_coor_pipe #(
+        .AXIS_DATA_WIDTH         (AXIS_DATA_WIDTH),
+        .AXIS_ADDR_WIDTH         (AXIS_ADDR_WIDTH),
+        .BRAM_DATA_WIDTH         (BRAM_DATA_WIDTH),
+        .BRAM_ADDR_WIDTH         (BRAM_ADDR_WIDTH),
+        .HASH_ADDR_WIDTH         (HASH_ADDR_WIDTH),
+        .THRESHOLD_CLOSE         (THRESHOLD_CLOSE),
+        .THRESHOLD_BOUDARY       (THRESHOLD_BOUDARY),
+        .THRESHOLD_BOUDARY_Z_LOW (THRESHOLD_BOUDARY_Z_LOW),
+        .THRESHOLD_BOUDARY_Z_HIGH(THRESHOLD_BOUDARY_Z_HIGH),
+        .PRE_LAT                 (PRE_LAT),
+        .LIFE_CYCLE              (LIFE_CYCLE)
+    ) voxel_coordinate_inst (
+        .clk                   (clk_p),
+        .rst_n                 (rst_n),
+        // AXI Stream Slave (Input)
+        .s_axis_dram_data      (m_axis_dram_data),
+        .s_axis_dram_keep      (),
+        .s_axis_dram_last      (m_axis_dram_last),
+        .s_axis_dram_valid     (m_axis_dram_valid),
+        .s_axis_dram_ready     (m_axis_dram_ready),
+        .bram_voxelpoint_clk   (bram_voxelpoint_clk),
+        .bram_voxelpoint_rst   (),
+        .bram_voxelpoint_wr    (bram_voxelpoint_wr),
+        .bram_voxelpoint_bwen  (bram_voxelpoint_bwen),
+        .bram_voxelpoint_addr  (bram_voxelpoint_addr),
+        .bram_voxelpoint_wrdata(bram_voxelpoint_wrdata),
+        .bram_expire_clk_a     (bram_expire_clk_a),
+        // .bram_expire_rst_a     (),
+        // .bram_expire_wr_a      (bram_expire_wr_a),
+        // .bram_expire_bwen_a    (bram_expire_bwen_a),
+        .bram_expire_addr_a    (bram_expire_addr_a),
+        .bram_expire_rdata_a   (bram_expire_rdata_a),
+        .bram_expire_clk_b     (bram_expire_clk_b),
+        .bram_expire_rst_b     (),
+        .bram_expire_wr_b      (bram_expire_wr_b),
+        .bram_expire_bwen_b    (bram_expire_bwen_b),
+        .bram_expire_addr_b    (bram_expire_addr_b),
+        .bram_expire_wrdata_b  (bram_expire_wrdata_b),
+        .m_axis_expire_tdata   (m_axis_expire_tdata),
+        .m_axis_expire_tvalid  (m_axis_expire_tvalid),
+        .m_axis_expire_tready  (m_axis_expire_tready)
+    );
+
+    wire                                     bram_clk_b;
+    wire                                     bram_rst_b;
+    wire        [       BRAM_ADDR_WIDTH-1:0] bram_addr_b;
+    wire                                     bram_en_b;
+    wire        [       BRAM_DATA_WIDTH-1:0] bram_rdata_b;
+    wire                                     m_axis_pfe_valid;
+    wire        [EXPAND_PT_DIM*PT_WIDTH-1:0] m_axis_pfe_data;
+    wire                                     m_axis_pfe_last;
+    wire                                     m_axis_pfe_voxel_valid;
+    wire signed [           COORD_WIDTH-1:0] m_axis_pfe_voxel_x;
+    wire signed [           COORD_WIDTH-1:0] m_axis_pfe_voxel_y;
+    pfe #(
+        .COORD_WIDTH    (COORD_WIDTH),
+        .PT_WIDTH       (PT_WIDTH),
+        .MAX_VOXEL_NUM  (MAX_VOXEL_NUM),
+        .VN_WIDTH       (VN_WIDTH),
+        .EXPAND_PT_DIM  (EXPAND_PT_DIM),
+        .BRAM_DATA_WIDTH(BRAM_DATA_WIDTH),
+        .BRAM_ADDR_WIDTH(BRAM_ADDR_WIDTH)
+    ) u_pfe (
+        .clk                   (clk_p),
+        .rst_n                 (rst_n),
+        .s_axis_expire_tvalid  (m_axis_expire_tvalid),
+        .s_axis_expire_tready  (m_axis_expire_tready),
+        .s_axis_expire_tdata   (m_axis_expire_tdata),
+        .bram_pfe_clk          (bram_pfe_clk),
+        // .bram_pfe_rst        (bram_pfe_rst),
+        .bram_pfe_addr         (bram_pfe_addr),
+        // .bram_pfe_en         (bram_pfe_en),
+        .bram_pfe_rdata        (bram_pfe_rdata),
+        .m_axis_pfe_valid      (m_axis_pfe_valid),
+        .m_axis_pfe_data       (m_axis_pfe_data),
+        .m_axis_pfe_last       (m_axis_pfe_last),
+        .m_axis_pfe_voxel_valid(m_axis_pfe_voxel_valid),
+        .m_axis_pfe_voxel_x    (m_axis_pfe_voxel_x),
+        .m_axis_pfe_voxel_y    (m_axis_pfe_voxel_y)
+    );
+
+    localparam WEIGHT_WIDTH = 16;
+    localparam ACC_WIDTH = 32;
+    wire                          m_axis_out_voxel_valid;
+    wire signed [COORD_WIDTH-1:0] m_axis_out_voxel_x;
+    wire signed [COORD_WIDTH-1:0] m_axis_out_voxel_y;
+    // wire [PT_WIDTH*OUT_PT_DIM-1:0] m_axis_end_data;
+    // assign m_axis_end_data_part = m_axis_end_data[16-1:0];
+    pfn_layer #(
+        .EXPAND_PT_DIM  (EXPAND_PT_DIM),
+        .COORD_WIDTH    (COORD_WIDTH),
+        // .OUT_PT_DIM     (OUT_PT_DIM),
+        .PT_WIDTH       (PT_WIDTH),
+        .MEM_WEIGHT_FILE("E:\\mmdetection3d\\my_output_parameters\\weight.mem"),
+        .MEM_BIAS_FILE  ("E:\\mmdetection3d\\my_output_parameters\\bias.mem"),
+        .WEIGHT_WIDTH   (WEIGHT_WIDTH),
+        .ACC_WIDTH      (ACC_WIDTH)
+    ) u_pfn_layer (
+        .clk                   (clk_p),
+        .rst_n                 (rst_n),
+        // 从上一级模块接收单个点的接口
+        .s_axis_pfe_valid      (m_axis_pfe_valid),
+        .s_axis_pfe_data       (m_axis_pfe_data),
+        .s_axis_pfe_last       (m_axis_pfe_last),
+        .s_axis_pfe_voxel_valid(m_axis_pfe_voxel_valid),
+        .s_axis_pfe_voxel_x    (m_axis_pfe_voxel_x),
+        .s_axis_pfe_voxel_y    (m_axis_pfe_voxel_y),
+        .m_axis_out_voxel_valid(m_axis_out_voxel_valid),
+        .m_axis_out_voxel_x    (m_axis_out_voxel_x),
+        .m_axis_out_voxel_y    (m_axis_out_voxel_y),
+        // 最终池化后的输出
+        .m_axis_out_valid      (m_axis_out_valid),
+        .m_axis_out_data_bit   (m_axis_out_data_bit)
+
+    );
+
+    dualport_bram #(
+        .DATA_WIDTH     (BRAM_DATA_WIDTH),
+        .ADDR_WIDTH     (BRAM_ADDR_WIDTH),
+        .MEM_FILE       ("NOTHING"),
+        .MEM_FILE_LENGTH()
+    ) u_voxelpoint_bram (
+        // 写
+        .a_clk (bram_voxelpoint_clk),
+        .a_wr  (bram_voxelpoint_wr),
+        .a_en  (1'b1),
+        .a_bwen(bram_voxelpoint_bwen),
+        .a_addr(bram_voxelpoint_addr),
+        .a_din (bram_voxelpoint_wrdata),
+        .a_dout(),
+        // 读出放到pfe buffer
+        .b_clk (bram_expire_clk_a),
+        .b_wr  (1'b0),                    // only read
+        .b_en  (1'b1),
+        .b_bwen(1'b0),                    // only read
+        .b_addr(bram_expire_addr_a),
+        .b_din (),
+        .b_dout(bram_expire_rdata_a)
+    );
+
+    // PFE voxelpoint buffer 
+    dualport_bram_2delay #(
+        .DATA_WIDTH     (BRAM_DATA_WIDTH),
+        .ADDR_WIDTH     (BRAM_ADDR_WIDTH),
+        .MEM_FILE       ("NOTHING"),
+        .MEM_FILE_LENGTH()
+    ) u_pfe_bram (
+        // voxel_coor_pipe 中的 expired_manager 写入待PFE的voxelpoint
+        .a_clk (bram_expire_clk_b),
+        .a_wr  (bram_expire_wr_b),
+        .a_en  (1'b1),
+        .a_bwen(bram_expire_bwen_b),
+        .a_addr(bram_expire_addr_b),
+        .a_din (bram_expire_wrdata_b),
+        .a_dout(),
+        // pfe 读取voxelpoint进行特征提取
+        .b_clk (bram_pfe_clk),
+        .b_wr  (1'b0),                  // only read
+        .b_en  (1'b1),
+        .b_bwen(1'b0),                  // only read
+        .b_addr(bram_pfe_addr),
+        .b_din (),
+        .b_dout(bram_pfe_rdata)
+    );
+
+
+endmodule

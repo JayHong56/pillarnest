@@ -109,7 +109,7 @@ def parse_list_file(file_path: str):
     return signal_data
 
 
-def plot_signal(signal_name, samples, out_dir, time_unit="ps"):
+def plot_signal(signal_name, samples, out_dir, time_unit="ps", show=True):
     """
     画单个信号波形
     """
@@ -138,8 +138,11 @@ def plot_signal(signal_name, samples, out_dir, time_unit="ps"):
     fname = sanitize_signal_name(signal_name) + ".png"
     out_path = os.path.join(out_dir, fname)
     plt.savefig(out_path, dpi=180)
-    plt.close()
 
+    if show:
+        plt.show()
+
+    plt.close()
     return out_path
 
 
@@ -163,6 +166,13 @@ def main():
         default=None,
         help="only plot signals containing these keywords"
     )
+    parser.add_argument(
+        "--no-show",
+        dest="show",
+        action="store_false",
+        help="save figure only, do not show window"
+    )
+    parser.set_defaults(show=True)
     args = parser.parse_args()
 
     os.makedirs(args.output_dir, exist_ok=True)
@@ -186,7 +196,7 @@ def main():
 
     print(f"Found {len(selected)} signals.")
     for sig, data in selected.items():
-        out = plot_signal(sig, data, args.output_dir, args.time_unit)
+        out = plot_signal(sig, data, args.output_dir, args.time_unit, show=args.show)
         print(f"[OK] {sig} -> {out}")
 
 

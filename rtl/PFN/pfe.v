@@ -18,6 +18,7 @@ module pfe #(
     output reg        [                       BRAM_ADDR_WIDTH-1:0] bram_pfe_addr,           // 假设地址空间足够大
     // output reg                                        bram_pfe_en,
     input  wire       [                       BRAM_DATA_WIDTH-1:0] bram_pfe_rdata,          // 255:0 ((9+7)*4 )*4points
+    input  wire                                                    m_axis_pfe_tready,
     output reg                                                     m_axis_pfe_valid,
     output reg        [                EXPAND_PT_DIM*PT_WIDTH-1:0] m_axis_pfe_data,         // 11*16 bits
     output reg                                                     m_axis_pfe_last,
@@ -38,14 +39,17 @@ module pfe #(
     // -----------------------------------------------------------
     // 存储该 Voxel 内的所有点，供后续处理 (Process 阶段) 使用
     localparam EXPAND_VOXEL_ROW = MAX_VOXEL_NUM >> 2;  // 20 / 4 = 5
-    localparam integer PT_WIDTH_I = 8;
-    localparam integer PT_WIDTH_F = 8;
-
+    localparam integer PT_WIDTH_I_XY = 8;
+    localparam integer PT_WIDTH_F_XY = 8;
+    localparam integer PT_WIDTH_I_Z = 4;
+    localparam integer PT_WIDTH_F_Z = 12;
+    localparam integer PT_WIDTH_I_IS = 9;
+    localparam integer PT_WIDTH_F_IS = 7;
 
     // --------------------扩展voxel_center点坐标维度---------------------
     // voxel_x_fix16 = voxel_x * 0.15 - 54.0 + 0.075
     localparam signed [18-1:0] COEFF_SLOPE = 18'sd9830;  // 0.15
-    localparam signed [23-1:0] COEFF_OFFSET = 23'sd3538944;  // 54.0
+    localparam signed [23-1:0] COEFF_OFFSET = 23'sd3534029;  // 53.925 (54.0 - 0.075 offset) in Q16
 
     // -----------------------------------------------------------
     // 源头安全反压控制 (In-flight tracking)
@@ -98,10 +102,10 @@ module pfe #(
                     st1_point_num   <= axis_point_num_indicator;
                     st1_voxel_x     <= axis_voxel_x;
                     st1_voxel_y     <= axis_voxel_y;
-                    st1_bram_b_addr <= axis_bram_index;  // 锁存 base_addr
+                    st1_bram_b_addr <= axis_bram_index;  // 锁存
                 end
 
-                bram_pfe_addr <= (req_phase == 0) ? (axis_bram_index) : (st1_bram_b_addr + 1'b1);
+                bram_pfe_addr <= (req_phase == 3'd0) ? (axis_bram_index) : (st1_bram_b_addr + 1'b1);
                 req_phase <= (req_phase == 3'd1) ? 3'd0 : req_phase + 1'b1;
                 req_valid <= 1'b1;
             end else begin
@@ -111,30 +115,37 @@ module pfe #(
     end
 
     // 将 Phase 和 Valid 信号随 BRAM 的 2 周期读取延迟进行打拍
-    reg [         2:0] pipe_phase[0:2];  // 延迟 2 拍的 phase (3bits)
-    reg                pipe_valid[0:2];  // 延迟 2 拍的 valid
+    reg [         2:0] pipe_phase[0:3];  // 延迟 2 拍的 phase (3bits)
+    reg                pipe_valid[0:3];  // 延迟 2 拍的 valid
 
-    reg [VN_WIDTH-1:0] pipe_pnum [0:2];  // 元数据伴随流动
-    reg [COORD_WIDTH-1:0] pipe_vx[0:2], pipe_vy[0:2];
+    reg [VN_WIDTH-1:0] pipe_pnum [0:3];  // 元数据伴随流动
+    reg [COORD_WIDTH-1:0] pipe_vx[0:3], pipe_vy[0:3];
 
     always @(posedge clk) begin
         pipe_phase[0] <= req_phase;
         pipe_phase[1] <= pipe_phase[0];
         pipe_phase[2] <= pipe_phase[1];
+        pipe_phase[3] <= pipe_phase[2];
 
         pipe_valid[0] <= req_valid;
         pipe_valid[1] <= pipe_valid[0];
         pipe_valid[2] <= pipe_valid[1];
+        pipe_valid[3] <= pipe_valid[2];
 
         pipe_pnum[0]  <= st1_point_num;
         pipe_pnum[1]  <= pipe_pnum[0];
         pipe_pnum[2]  <= pipe_pnum[1];
+        pipe_pnum[3]  <= pipe_pnum[2];
+
         pipe_vx[0]    <= st1_voxel_x;
         pipe_vx[1]    <= pipe_vx[0];
         pipe_vx[2]    <= pipe_vx[1];
+        pipe_vx[3]    <= pipe_vx[2];
+
         pipe_vy[0]    <= st1_voxel_y;
         pipe_vy[1]    <= pipe_vy[0];
         pipe_vy[2]    <= pipe_vy[1];
+        pipe_vy[3]    <= pipe_vy[2];
     end
 
     // Stage 2: 接收数据与累加 (Fetch & Accumulate)
@@ -183,7 +194,7 @@ module pfe #(
     // Stage 3: 数据对齐与准备 (等待均值计算前置)
     // 目标：当 Stage 2 最后一个 Phase 完成后，锁存完整数据，准备喂给 DSP
     // Stage 2 -> Stage 3 完成条件：当前 voxel 两行数据都读完
-    wire st2_valid = pipe_valid[2] && (pipe_phase[2] == 3'd1);  // 正在读最后一行
+    wire st2_valid = pipe_valid[3] && (pipe_phase[3] == 3'd1);  // st2的下半有值的周期
     reg  st3_valid;
     reg  st4_valid;
     wire st4_push;
@@ -213,12 +224,12 @@ module pfe #(
             // 如果 st3_to_st4 与 st2_valid 同拍成立，就相当于 Stage3 无缝换包
             if (st2_to_st3) begin
                 st3_valid <= 1'b1;
-                st3_pnum  <= pipe_pnum[2];
+                st3_pnum  <= pipe_pnum[3];
                 st3_sum_x <= sum_x_acc;
                 st3_sum_y <= sum_y_acc;
                 st3_sum_z <= sum_z_acc;
-                st3_vx    <= pipe_vx[2];
-                st3_vy    <= pipe_vy[2];
+                st3_vx    <= pipe_vx[3];
+                st3_vy    <= pipe_vy[3];
 
                 for (i = 0; i < MAX_VOXEL_NUM; i = i + 1) begin
                     st3_points_buffer[i] <= st2_points_buffer[i];
@@ -269,10 +280,10 @@ module pfe #(
 
     assign temp_sub_voxel_x = temp_mult_voxel_x - COEFF_OFFSET;  // 注意位宽防止溢出
     assign temp_sub_voxel_y = temp_mult_voxel_y - COEFF_OFFSET;
-    // Cluster Center
+    // Cluster Center begin
     fxp_mul #(
-        .WIIA (PT_WIDTH_I + VN_WIDTH),
-        .WIFA (PT_WIDTH_F),
+        .WIIA (PT_WIDTH_I_XY + VN_WIDTH),
+        .WIFA (PT_WIDTH_F_XY),
         .WIIB (18),
         .WIFB (0),
         .WOI  (39),
@@ -285,8 +296,8 @@ module pfe #(
         .overflow()
     );
     fxp_mul #(
-        .WIIA (PT_WIDTH_I + VN_WIDTH),
-        .WIFA (PT_WIDTH_F),
+        .WIIA (PT_WIDTH_I_XY + VN_WIDTH),
+        .WIFA (PT_WIDTH_F_XY),
         .WIIB (18),
         .WIFB (0),
         .WOI  (39),
@@ -299,8 +310,8 @@ module pfe #(
         .overflow()
     );
     fxp_mul #(
-        .WIIA (PT_WIDTH_I + VN_WIDTH),
-        .WIFA (PT_WIDTH_F),
+        .WIIA (PT_WIDTH_I_Z + VN_WIDTH),
+        .WIFA (PT_WIDTH_F_Z),
         .WIIB (18),
         .WIFB (0),
         .WOI  (39),
@@ -359,14 +370,14 @@ module pfe #(
                 st4_valid <= 1'b1;
                 st4_pnum <= st3_pnum;
 
-                // Q8.8
-                st4_mean_x <= temp_mult_x[16-PT_WIDTH_F+15:16-PT_WIDTH_F];
-                st4_mean_y <= temp_mult_y[16-PT_WIDTH_F+15:16-PT_WIDTH_F];
-                st4_mean_z <= temp_mult_z[16-PT_WIDTH_F+15:16-PT_WIDTH_F];
+                // QI.F
+                st4_mean_x <= temp_mult_x[16-PT_WIDTH_F_XY+15:16-PT_WIDTH_F_XY];
+                st4_mean_y <= temp_mult_y[16-PT_WIDTH_F_XY+15:16-PT_WIDTH_F_XY];
+                st4_mean_z <= temp_mult_z[16-PT_WIDTH_F_Z+15:16-PT_WIDTH_F_Z];
 
-                st4_vx_fix16 <= temp_sub_voxel_x[16-PT_WIDTH_F+15:16-PT_WIDTH_F];
-                st4_vy_fix16 <= temp_sub_voxel_y[16-PT_WIDTH_F+15:16-PT_WIDTH_F];
-                st4_vz_fix16 <= 16'hff00;  // -1.0 Q8.8
+                st4_vx_fix16 <= temp_sub_voxel_x[16-PT_WIDTH_F_XY+15:16-PT_WIDTH_F_XY];
+                st4_vy_fix16 <= temp_sub_voxel_y[16-PT_WIDTH_F_XY+15:16-PT_WIDTH_F_XY];
+                st4_vz_fix16 <= 16'hf000;  // -1.0 Q4.12
 
                 st4_voxel_x <= st3_vx;
                 st4_voxel_y <= st3_vy;
@@ -400,7 +411,6 @@ module pfe #(
     wire fifo_empty = (fifo_count == 0);
     wire fifo_full = (fifo_count == VOX_FIFO_DEPTH);
 
-    // serializer 发完一个 voxel
     assign st4_push = st4_valid && !fifo_full;
     wire voxel_pop;
     wire [3:0] total_occupancy = inflight_cnt + (st3_valid ? 4'd1 : 4'd0) + (st4_valid ? 4'd1 : 4'd0) + fifo_count;
@@ -434,12 +444,12 @@ module pfe #(
         for (gi = 0; gi < MAX_VOXEL_NUM; gi = gi + 1) begin : GEN_SUB_ALL
 
             fxp_addsub #(
-                .WIIA (8),
-                .WIFA (8),
-                .WIIB (8),
-                .WIFB (8),
-                .WOI  (8),
-                .WOF  (8),
+                .WIIA (PT_WIDTH_I_XY),
+                .WIFA (PT_WIDTH_F_XY),
+                .WIIB (PT_WIDTH_I_XY),
+                .WIFB (PT_WIDTH_F_XY),
+                .WOI  (PT_WIDTH_I_XY),
+                .WOF  (PT_WIDTH_F_XY),
                 .ROUND(1)
             ) u_sub_x_mean (
                 .ina     (st4_points_buffer[gi][63-:16]),
@@ -450,12 +460,12 @@ module pfe #(
             );
 
             fxp_addsub #(
-                .WIIA (8),
-                .WIFA (8),
-                .WIIB (8),
-                .WIFB (8),
-                .WOI  (8),
-                .WOF  (8),
+                .WIIA (PT_WIDTH_I_XY),
+                .WIFA (PT_WIDTH_F_XY),
+                .WIIB (PT_WIDTH_I_XY),
+                .WIFB (PT_WIDTH_F_XY),
+                .WOI  (PT_WIDTH_I_XY),
+                .WOF  (PT_WIDTH_F_XY),
                 .ROUND(1)
             ) u_sub_y_mean (
                 .ina     (st4_points_buffer[gi][47-:16]),
@@ -466,12 +476,12 @@ module pfe #(
             );
 
             fxp_addsub #(
-                .WIIA (8),
-                .WIFA (8),
-                .WIIB (8),
-                .WIFB (8),
-                .WOI  (8),
-                .WOF  (8),
+                .WIIA (PT_WIDTH_I_Z),
+                .WIFA (PT_WIDTH_F_Z),
+                .WIIB (PT_WIDTH_I_Z),
+                .WIFB (PT_WIDTH_F_Z),
+                .WOI  (PT_WIDTH_I_Z),
+                .WOF  (PT_WIDTH_F_Z),
                 .ROUND(1)
             ) u_sub_z_mean (
                 .ina     (st4_points_buffer[gi][31-:16]),
@@ -482,12 +492,12 @@ module pfe #(
             );
 
             fxp_addsub #(
-                .WIIA (8),
-                .WIFA (8),
-                .WIIB (8),
-                .WIFB (8),
-                .WOI  (8),
-                .WOF  (8),
+                .WIIA (PT_WIDTH_I_XY),
+                .WIFA (PT_WIDTH_F_XY),
+                .WIIB (PT_WIDTH_I_XY),
+                .WIFB (PT_WIDTH_F_XY),
+                .WOI  (PT_WIDTH_I_XY),
+                .WOF  (PT_WIDTH_F_XY),
                 .ROUND(1)
             ) u_sub_x_vcenter (
                 .ina     (st4_points_buffer[gi][63-:16]),
@@ -498,12 +508,12 @@ module pfe #(
             );
 
             fxp_addsub #(
-                .WIIA (8),
-                .WIFA (8),
-                .WIIB (8),
-                .WIFB (8),
-                .WOI  (8),
-                .WOF  (8),
+                .WIIA (PT_WIDTH_I_XY),
+                .WIFA (PT_WIDTH_F_XY),
+                .WIIB (PT_WIDTH_I_XY),
+                .WIFB (PT_WIDTH_F_XY),
+                .WOI  (PT_WIDTH_I_XY),
+                .WOF  (PT_WIDTH_F_XY),
                 .ROUND(1)
             ) u_sub_y_vcenter (
                 .ina     (st4_points_buffer[gi][47-:16]),
@@ -514,12 +524,12 @@ module pfe #(
             );
 
             fxp_addsub #(
-                .WIIA (8),
-                .WIFA (8),
-                .WIIB (8),
-                .WIFB (8),
-                .WOI  (8),
-                .WOF  (8),
+                .WIIA (PT_WIDTH_I_Z),
+                .WIFA (PT_WIDTH_F_Z),
+                .WIIB (PT_WIDTH_I_Z),
+                .WIFB (PT_WIDTH_F_Z),
+                .WOI  (PT_WIDTH_I_Z),
+                .WOF  (PT_WIDTH_F_Z),
                 .ROUND(1)
             ) u_sub_z_vcenter (
                 .ina     (st4_points_buffer[gi][31-:16]),
@@ -613,32 +623,32 @@ module pfe #(
         end
     end
 
-    // =========================================================================
     // Stage 6: 基于 4-entry FIFO 的序列化输出（look-ahead rd_ptr/count 无缝切换版）
-    // =========================================================================
     reg [VN_WIDTH-1:0] point_cnt;
-    reg serialize_busy;
+    // 【核心新增 1】判断当前是否允许数据推进一步
+    // 逻辑：如果当前没有发出有效数据（!valid），或者下游发来了 ready（可以接收），状态机才往前走
+    wire out_advance = (!m_axis_pfe_valid || m_axis_pfe_tready); // 当发中间点且下一个点不是最后一个点时，
 
     // 当前 FIFO 头信息
     wire [VN_WIDTH-1:0] cur_head_pnum = ep_fifo_pnum[fifo_rd_ptr];
-
+    wire fire_out = m_axis_pfe_valid && m_axis_pfe_tready;
     // 当前 busy 态下，这一拍是否正在发送当前 voxel 的最后一个点
-    wire cur_last_fire = serialize_busy && (point_cnt == (cur_head_pnum - {{(VN_WIDTH - 1) {1'b0}}, 1'b1}));
-    assign voxel_pop = cur_last_fire |
-                   (!serialize_busy && !fifo_empty &&
-                    (ep_fifo_pnum[fifo_rd_ptr] == {{(VN_WIDTH - 1){1'b0}},1'b1}));
+    // wire cur_last_fire = serialize_busy && (point_cnt == (cur_head_pnum - {{(VN_WIDTH - 1) {1'b0}}, 1'b1}));
+    // assign voxel_pop = cur_last_fire |
+    //                (!serialize_busy && !fifo_empty &&
+    //                 (ep_fifo_pnum[fifo_rd_ptr] == {{(VN_WIDTH - 1){1'b0}},1'b1}));
+
+    // 【核心修复】FIFO Pop 必须且只能在“当前 Voxel 的最后一个点真实被下游接收”的时刻发生
+    assign voxel_pop = fire_out && m_axis_pfe_last;
+
     wire [VOX_FIFO_AW-1:0] rd_ptr_after = fifo_rd_ptr + 1'b1;
 
-    wire [VOX_FIFO_AW:0] fifo_count_after =
-        fifo_count
-        + (st4_push ? {{VOX_FIFO_AW{1'b0}},1'b1} : {(VOX_FIFO_AW+1){1'b0}})
-        - (cur_last_fire ? {{VOX_FIFO_AW{1'b0}},1'b1} : {(VOX_FIFO_AW+1){1'b0}});
+    // wire [VOX_FIFO_AW:0] fifo_count_after =
+    //     fifo_count
+    //     + (st4_push ? {{VOX_FIFO_AW{1'b0}},1'b1} : {(VOX_FIFO_AW+1){1'b0}})
+    //     - (cur_last_fire ? {{VOX_FIFO_AW{1'b0}},1'b1} : {(VOX_FIFO_AW+1){1'b0}});
 
-    wire fifo_empty_after = (fifo_count_after == {(VOX_FIFO_AW + 1) {1'b0}});
-
-    // “下一头部”的 pnum/data
-    wire [VN_WIDTH-1:0] next_head_pnum = ep_fifo_pnum[rd_ptr_after];
-
+    wire [VN_WIDTH-1:0] next_point_cnt = point_cnt + 1'b1;
     reg signed [COORD_WIDTH-1:0] voxel_x_test;
     reg signed [COORD_WIDTH-1:0] voxel_y_test;
 
@@ -652,86 +662,95 @@ module pfe #(
         end
     end
 
-
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            serialize_busy         <= 1'b0;
             point_cnt              <= {VN_WIDTH{1'b0}};
             m_axis_pfe_valid       <= 1'b0;
+            m_axis_pfe_last        <= 1'b0;
             m_axis_pfe_voxel_valid <= 1'b0;
             m_axis_pfe_voxel_x     <= {COORD_WIDTH{1'b0}};
             m_axis_pfe_voxel_y     <= {COORD_WIDTH{1'b0}};
             m_axis_pfe_data        <= {EXPAND_PT_DIM * PT_WIDTH{1'b0}};
-            m_axis_pfe_last        <= 1'b0;
-        end else begin
-            // 默认
-            m_axis_pfe_valid <= 1'b0;
-            m_axis_pfe_last <= 1'b0;
-            m_axis_pfe_voxel_valid <= 1'b0;
-            m_axis_pfe_voxel_x <= {COORD_WIDTH{1'b0}};
-            m_axis_pfe_voxel_y <= {COORD_WIDTH{1'b0}};
+        end else if (out_advance) begin
+            if (m_axis_pfe_valid && m_axis_pfe_last) begin
+                // 【情况 A】当前 Voxel 的最后一个点刚刚被接收完！
+                // 此时 voxel_pop 生效，FIFO 的 rd_ptr 将在此时钟边沿更新。
+                // 强制插入 1 拍无效状态，以便等待 FIFO 数据更新并安全读取下一个 Voxel。
+                // (这个无效状态正好与 PFN 第二拍的忙碌状态完美重合)
+                m_axis_pfe_valid       <= 1'b0;
+                m_axis_pfe_last        <= 1'b0;
+                m_axis_pfe_voxel_valid <= 1'b0;
 
-            if (serialize_busy) begin
-                m_axis_pfe_valid <= 1'b1;
-                m_axis_pfe_data  <= ep_fifo[fifo_rd_ptr][point_cnt];
+            end else if (m_axis_pfe_valid) begin
+                // 【情况 B】正在发送 Voxel 的中间点，切换到下一个点
+                point_cnt       <= next_point_cnt;
+                m_axis_pfe_data <= ep_fifo[fifo_rd_ptr][next_point_cnt];
 
-                if (cur_last_fire) begin
+                // 提前检查切换到的这个点是否为该 Voxel 的最后一个点
+                if (next_point_cnt == (cur_head_pnum - 1'b1)) begin
                     m_axis_pfe_last        <= 1'b1;
                     m_axis_pfe_voxel_valid <= 1'b1;
                     m_axis_pfe_voxel_x     <= ep_fifo_voxel_x[fifo_rd_ptr];
                     m_axis_pfe_voxel_y     <= ep_fifo_voxel_y[fifo_rd_ptr];
-
-                    serialize_busy         <= 1'b0;
-                    point_cnt              <= {VN_WIDTH{1'b0}};
-                    // if (!fifo_empty_after) begin
-                    //     if (next_head_pnum == {{(VN_WIDTH - 1) {1'b0}}, 1'b1}) begin
-                    //         serialize_busy         <= 1'b0;
-                    //         point_cnt              <= {VN_WIDTH{1'b0}};
-                    //     end else begin
-                    //         serialize_busy <= 1'b0;
-                    //         point_cnt      <= {VN_WIDTH{1'b0}};
-                    //     end
-                    // end else begin
-                    //     serialize_busy <= 1'b0;
-                    //     point_cnt      <= {VN_WIDTH{1'b0}};
-                    // end
-                end else begin
-                    // 当前 voxel 还没发完
-                    point_cnt <= point_cnt + {{(VN_WIDTH - 1) {1'b0}}, 1'b1};
                 end
 
             end else begin
-                // -----------------------------
-                // idle/start: 启动发送当前 FIFO 头
-                // 注意：这里直接用“当前寄存器态”的 fifo_rd_ptr/fifo_empty
-                // 因为上一个 voxel 若在上一拍最后一点结束，
-                // 其 pop 已经在 FIFO always 块里更新完毕，这一拍 fifo_rd_ptr 已是新头
-                // -----------------------------
+                // 【情况 C】当前总线空闲，检查 FIFO 中是否有新 Voxel 任务
                 if (!fifo_empty) begin
-                    m_axis_pfe_valid <= 1'b1;
-                    m_axis_pfe_data  <= ep_fifo[fifo_rd_ptr][0];
+                    m_axis_pfe_valid   <= 1'b1;
+                    m_axis_pfe_data    <= ep_fifo[fifo_rd_ptr][0];
+                    point_cnt          <= {VN_WIDTH{1'b0}};
+                    m_axis_pfe_voxel_x <= ep_fifo_voxel_x[fifo_rd_ptr];
+                    m_axis_pfe_voxel_y <= ep_fifo_voxel_y[fifo_rd_ptr];
 
-                    if (ep_fifo_pnum[fifo_rd_ptr] == {{(VN_WIDTH - 1) {1'b0}}, 1'b1}) begin
-                        // 单点 voxel：本拍直接发完
+                    if (cur_head_pnum == 1'b1) begin
+                        // 单点 Voxel 特例处理
                         m_axis_pfe_last        <= 1'b1;
                         m_axis_pfe_voxel_valid <= 1'b1;
-                        m_axis_pfe_voxel_x     <= ep_fifo_voxel_x[fifo_rd_ptr];
-                        m_axis_pfe_voxel_y     <= ep_fifo_voxel_y[fifo_rd_ptr];
-                        serialize_busy         <= 1'b0;
-                        point_cnt              <= {VN_WIDTH{1'b0}};
                     end else begin
-                        // 多点 voxel：本拍发 idx0，下一拍从 idx1 开始
-                        serialize_busy <= 1'b1;
-                        point_cnt      <= {{(VN_WIDTH - 1) {1'b0}}, 1'b1};
+                        m_axis_pfe_last        <= 1'b0;
+                        m_axis_pfe_voxel_valid <= 1'b0;
                     end
-                end else begin
-                    serialize_busy <= 1'b0;
-                    point_cnt      <= {VN_WIDTH{1'b0}};
+                end
+            end
+
+        end
+    end
+
+
+`ifndef SYNTHESIS
+
+    // ====================================================================
+    // 【独立的仿真测试模块】 抓取并打印特定 Voxel 数据
+    // ====================================================================
+    // synthesis translate_off
+    integer test_k;
+    reg [63:0] test_point_data;
+
+    always @(posedge clk) begin
+        // 当流水线 Stage 2 有效且坐标匹配时触发
+        if (rst_n && pipe_valid[1]) begin
+            if (pipe_vx[1] == 325 && pipe_vy[1] == 380) begin
+                // 遍历当前周期读出的 10 个点
+                for (test_k = 0; test_k < 10; test_k = test_k + 1) begin
+                    // 确保当前点有效（没有超出该 Voxel 的真实点数）
+                    if (base_idx + test_k < pipe_pnum[1]) begin
+                        test_point_data = bram_pfe_rdata[(test_k*64)+:64];
+
+                        $display(
+                            "[Sim Time: %0t] Voxel(325, 380) HIT! Point Index: %0d | X: %0.3f, Y: %0.3f, Z: %0.3f, Intensity: %0.3f",
+                            $time, (base_idx + test_k), $itor($signed(test_point_data[63-:16])) / 256.0, $itor
+                            ($signed(test_point_data[47-:16])) / 256.0, $itor($signed(test_point_data[31-:16])) / 256.0,
+                            $itor($signed(test_point_data[15-:16])) / 256.0);
+                    end
                 end
             end
         end
     end
+    // synthesis translate_on
+    // ====================================================================
 
+`endif
 
 endmodule
 

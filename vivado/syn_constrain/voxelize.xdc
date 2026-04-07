@@ -8,7 +8,7 @@
 # Assumes external free-running clock on port "clk".
 # Change period to match your board clock frequency.
 # 100 MHz -> 10.000 ns
-create_clock -name clk -period 10.000 [get_ports clk]
+create_clock -name clk -period 10.000 [get_ports clk_p]
 
 # Optional: small uncertainty (adjust as needed)
 set_clock_uncertainty 0.200 [get_clocks clk]

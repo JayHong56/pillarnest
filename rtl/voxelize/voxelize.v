@@ -10,10 +10,12 @@ module voxelize #(
     parameter integer BRAM_ADDR_WIDTH_PFE = 7     // HASH_VOXEL_NUMBER(64) * 2brams
 
 ) (
-    input wire clk_p,
-    input wire clk_n,
-    input wire rst_n
+    input  wire clk_p,
+    input  wire clk_n,
+    input  wire rst_n,
+    output wire m_axis_out_data_bit
 );
+    localparam integer MEM_FILE_LENGTH = 34752;
     reg                            dram_read_en = 1'b1;
     reg                            dram_write_en = 1'b0;
     wire [  DRAM_ADDR_WIDTH - 1:0] dram_write_size = (1 << DRAM_ADDR_WIDTH) - 1;
@@ -23,7 +25,7 @@ module voxelize #(
         .DATA_WIDTH     (DRAM_DATA_WIDTH),
         .ADDR_WIDTH     (DRAM_ADDR_WIDTH),                                                   // 65536 depth
         .MEM_FILE       ("E:\\verilog\\pillarnest\\rtl\\.pointcloud\\points_bits_128.txt"),
-        .MEM_FILE_LENGTH(34752)
+        .MEM_FILE_LENGTH(MEM_FILE_LENGTH)
     ) u_pointcloud_dram (
         .clk          (clk_p),
         .rst_n        (rst_n),
@@ -34,6 +36,42 @@ module voxelize #(
         .data_in      (),
         .data_out     (dram_data_out)
     );
+
+// =========================================================================
+    // 帧末清空信号 (Frame End) 生成与延迟补偿逻辑
+    // =========================================================================
+    reg frame_end_raw;
+    reg read_done_flag;
+
+    always @(posedge clk_p or negedge rst_n) begin
+        if (!rst_n) begin
+            frame_end_raw <= 1'b0;
+            read_done_flag <= 1'b0;
+        end else begin
+            // 核心条件：当读地址等于 MEM_FILE_LENGTH，且之前没触发过
+            if ((dram_read_address == MEM_FILE_LENGTH[DRAM_ADDR_WIDTH-1:0]) && !read_done_flag) begin
+                frame_end_raw <= 1'b1;
+                read_done_flag <= 1'b1; // 锁定，保证只产生一个单周期脉冲
+            end else begin
+                frame_end_raw <= 1'b0;
+            end
+        end
+    end
+
+    // 延迟补偿：让 frame_end 脉冲陪着最后一个点一起走过流水线
+    reg [63:0] frame_end_shift;
+    always @(posedge clk_p or negedge rst_n) begin
+        if (!rst_n) begin
+            frame_end_shift <= 64'd0;
+        end else if (!voxel_coordinate_inst.u_hash_table_tombstone.hash_stall) begin // 遇到反压时暂停移位，保持与数据流完全同步
+            frame_end_shift <= {frame_end_shift[62:0], frame_end_raw};
+        end
+    end
+
+    // 你可以通过查看仿真波形，数一下从 dram 读出到数据进入 hash 表到底差了几拍
+    // 然后调整这里的索引用以对齐 (这里暂时设定为 30 拍)
+    wire frame_end = frame_end_shift[30]; 
+    wire flush_done;
 
 
     wire m_axis_dram_last;
@@ -75,8 +113,8 @@ module voxelize #(
     localparam HASH_ADDR_WIDTH = $clog2(HASH_TABLE_SIZE);  // log2(HASH_TABLE_SIZE)
     localparam [15:0] THRESHOLD_CLOSE = 16'h0100;  // 1.00m
     localparam [15:0] THRESHOLD_BOUDARY = 16'h3600;  // 54.00m
-    localparam [15:0] THRESHOLD_BOUDARY_Z_LOW = 16'h0500;  // -5m
-    localparam [15:0] THRESHOLD_BOUDARY_Z_HIGH = 16'h0300;  // +3m
+    localparam [15:0] THRESHOLD_BOUDARY_Z_LOW = 16'h5000;  // +5m (-5m)
+    localparam [15:0] THRESHOLD_BOUDARY_Z_HIGH = 16'h3000;  // +3m
     localparam integer PRE_LAT = 0;  // 预处理固定延迟（拍数占位）
     localparam [15:0] LIFE_CYCLE = 16'd100;
     wire                                              bram_voxelpoint_clk;
@@ -122,8 +160,11 @@ module voxelize #(
         .PRE_LAT                 (PRE_LAT),
         .LIFE_CYCLE              (LIFE_CYCLE)
     ) voxel_coordinate_inst (
-        .clk                   (clk_p),
-        .rst_n                 (rst_n),
+        .clk       (clk_p),
+        .rst_n     (rst_n),
+        .frame_end (frame_end),
+        .flush_done(flush_done),
+
         // AXI Stream Slave (Input)
         .s_axis_dram_data      (m_axis_dram_data),
         .s_axis_dram_keep      (),
@@ -159,6 +200,7 @@ module voxelize #(
     wire                                     bram_en_b;
     wire        [       BRAM_DATA_WIDTH-1:0] bram_rdata_b;
     wire                                     m_axis_pfe_valid;
+    wire                                     m_axis_pfe_tready;
     wire        [EXPAND_PT_DIM*PT_WIDTH-1:0] m_axis_pfe_data;
     wire                                     m_axis_pfe_last;
     wire                                     m_axis_pfe_voxel_valid;
@@ -184,6 +226,7 @@ module voxelize #(
         // .bram_pfe_en         (bram_pfe_en),
         .bram_pfe_rdata        (bram_pfe_rdata),
         .m_axis_pfe_valid      (m_axis_pfe_valid),
+        .m_axis_pfe_tready     (m_axis_pfe_tready),
         .m_axis_pfe_data       (m_axis_pfe_data),
         .m_axis_pfe_last       (m_axis_pfe_last),
         .m_axis_pfe_voxel_valid(m_axis_pfe_voxel_valid),
@@ -203,7 +246,7 @@ module voxelize #(
         .COORD_WIDTH    (COORD_WIDTH),
         // .OUT_PT_DIM     (OUT_PT_DIM),
         .PT_WIDTH       (PT_WIDTH),
-        .MEM_WEIGHT_FILE("E:\\mmdetection3d\\my_output_parameters\\weight.mem"),
+        .MEM_WEIGHT_FILE("E:\\mmdetection3d\\my_output_parameters\\pfn_weight.mem"),
         .MEM_BIAS_FILE  ("E:\\mmdetection3d\\my_output_parameters\\bias.mem"),
         .WEIGHT_WIDTH   (WEIGHT_WIDTH),
         .ACC_WIDTH      (ACC_WIDTH)
@@ -212,6 +255,7 @@ module voxelize #(
         .rst_n                 (rst_n),
         // 从上一级模块接收单个点的接口
         .s_axis_pfe_valid      (m_axis_pfe_valid),
+        .s_axis_pfe_tready     (m_axis_pfe_tready),
         .s_axis_pfe_data       (m_axis_pfe_data),
         .s_axis_pfe_last       (m_axis_pfe_last),
         .s_axis_pfe_voxel_valid(m_axis_pfe_voxel_valid),
@@ -221,7 +265,9 @@ module voxelize #(
         .m_axis_out_voxel_x    (m_axis_out_voxel_x),
         .m_axis_out_voxel_y    (m_axis_out_voxel_y),
         // 最终池化后的输出
-        .m_axis_out_valid      ()
+        .m_axis_out_valid      (m_axis_out_valid),
+        .m_axis_out_data_bit   (m_axis_out_data_bit)
+
     );
 
     dualport_bram #(

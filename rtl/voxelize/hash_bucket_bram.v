@@ -1,16 +1,23 @@
 module hash_bucket_bram #(
-    parameter integer WIDTH = 64,
-    parameter integer DEPTH = 64,
-    parameter integer AW    = $clog2(DEPTH)
+    parameter integer WIDTH     = 64,
+    parameter integer DEPTH     = 64,
+    parameter integer AW        = $clog2(DEPTH),
+    parameter         NUM_BYTES = WIDTH / 8
 ) (
-    input wire clk,
+    input wire clk_a,
+    input wire clk_b,
+    input wire rst_n,
 
+    // Port A
     input  wire [   AW-1:0] a_addr,
+    input  wire             a_en,
     input  wire             a_we,
     input  wire [WIDTH-1:0] a_wdata,
     output reg  [WIDTH-1:0] a_rdata,
 
+    // Port B
     input  wire [   AW-1:0] b_addr,
+    input  wire             b_en,
     input  wire             b_we,
     input  wire [WIDTH-1:0] b_wdata,
     output reg  [WIDTH-1:0] b_rdata
@@ -23,19 +30,32 @@ module hash_bucket_bram #(
         end
     end
 
-    // 用于： 【A口读， B口写， 读写同地址时写优先的bram】
-    always @(posedge clk) begin
-        if (b_we && (b_addr == a_addr)) begin  // 读写冲突，写优先
-            a_rdata <= b_wdata;
-        end else begin
+
+    // 循环变量
+    integer i;
+    // Port A
+    always @(posedge clk_a) begin
+
+        if (a_en) begin
             a_rdata <= mem[a_addr];
+
+            if (a_we) begin
+                a_rdata <= mem[a_addr];
+                mem[a_addr] <= a_wdata;
+            end
         end
-
-        if (a_we) mem[a_addr] <= a_wdata;
-        if (b_we) mem[b_addr] <= b_wdata;
-
-
-        b_rdata <= mem[b_addr];
-
     end
+
+    // Port B
+    always @(posedge clk_b) begin
+        if (b_en) begin
+            b_rdata <= mem[b_addr];
+
+            if (b_we) begin
+                b_rdata <= mem[b_addr];
+                mem[b_addr] <= b_wdata;
+            end
+        end
+    end
+
 endmodule
