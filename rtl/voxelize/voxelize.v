@@ -1,155 +1,149 @@
-`timescale 1ps / 1ps
-
-module voxelize #(
-    parameter integer DRAM_DATA_WIDTH     = 128,
-    parameter integer DRAM_ADDR_WIDTH     = 16,
-    parameter integer AXIS_DATA_WIDTH     = 128,
-    parameter integer AXIS_ADDR_WIDTH     = 16,
-    parameter integer BRAM_DATA_WIDTH     = 640,  // 64bit * 4points
-    parameter integer BRAM_ADDR_WIDTH     = 9,    // HASH_VOXEL_NUMBER(256) * 2brams
-    parameter integer BRAM_ADDR_WIDTH_PFE = 7     // HASH_VOXEL_NUMBER(64) * 2brams
-
-) (
-    input  wire clk_p,
-    input  wire clk_n,
-    input  wire rst_n,
-    output wire m_axis_out_data_bit
-);
-    localparam integer MEM_FILE_LENGTH = 34752;
-    reg                            dram_read_en = 1'b1;
-    reg                            dram_write_en = 1'b0;
-    wire [  DRAM_ADDR_WIDTH - 1:0] dram_write_size = (1 << DRAM_ADDR_WIDTH) - 1;
-    wire [(DRAM_ADDR_WIDTH - 1):0] dram_read_address;
-    wire [(DRAM_DATA_WIDTH - 1):0] dram_data_out;
-    dram #(
-        .DATA_WIDTH     (DRAM_DATA_WIDTH),
-        .ADDR_WIDTH     (DRAM_ADDR_WIDTH),                                                   // 65536 depth
-        .MEM_FILE       ("E:\\verilog\\pillarnest\\rtl\\.pointcloud\\points_bits_128.txt"),
-        .MEM_FILE_LENGTH(MEM_FILE_LENGTH)
-    ) u_pointcloud_dram (
-        .clk          (clk_p),
-        .rst_n        (rst_n),
-        .en           (dram_read_en),
-        .we           (dram_write_en),
-        .write_address(),
-        .read_address (dram_read_address),
-        .data_in      (),
-        .data_out     (dram_data_out)
-    );
-
 // =========================================================================
-    // 帧末清空信号 (Frame End) 生成与延迟补偿逻辑
+// AXI4-Stream 封装的 Voxelize 加速器顶层
+// =========================================================================
+module voxelize #(
+    // AXI4 总线数据位宽
+    parameter integer AXIS_DATA_WIDTH = 128,
+    // 内部存储配置
+    parameter integer BRAM_DATA_WIDTH = 640,
+    parameter integer BRAM_ADDR_WIDTH = 9,
+    parameter integer BRAM_ADDR_WIDTH_PFE = 7,
+    // 算法及数据维度配置 (由内部 localparam 提升)
+    parameter integer PT_WIDTH = 16,
+    parameter integer OUT_PT_DIM = 48,
+    parameter integer COORD_WIDTH = 11,
+    parameter integer VN_WIDTH = 5,
+    parameter integer EXPAND_PT_DIM = 11,
+    parameter integer MAX_VOXEL_NUM = 20,
+    parameter integer HASH_TABLE_SIZE = 256,
+    parameter THRESHOLD_CLOSE = 16'h0100,
+    parameter THRESHOLD_BOUDARY = 16'h3600,
+    parameter THRESHOLD_BOUDARY_Z_LOW = 16'h5000,
+    parameter THRESHOLD_BOUDARY_Z_HIGH = 16'h3000,
+    parameter integer PRE_LAT = 0,
+    parameter LIFE_CYCLE = 16'd100,
+    // 权重与偏置文件 (移至参数区避免硬编码)
+    parameter MEM_WEIGHT_FILE = "E:\\mmdetection3d\\my_output_parameters\\pfn_weight.mem",
+    parameter MEM_BIAS_FILE = "E:\\mmdetection3d\\my_output_parameters\\bias.mem",
+    parameter [31:0] BASE_ADDR = 32'h0000_0000,  // 点云在 DDR 中的起始物理地址
+    parameter [22:0] FRAME_BYTES = 23'd34752  // 一帧点云的总字节数 (例如：2172个点 * 16字节)
+) (
+    // 全局时钟与复位
+    input wire aclk,
+    input wire aresetn,
+
+    // -----------------------------------------------------------
+    // AXI4-Stream Slave (点云数据输入)
+    // -----------------------------------------------------------
+    input  wire [AXIS_DATA_WIDTH-1:0] s_axis_tdata,
+    input  wire                       s_axis_tvalid,
+    output wire                       s_axis_tready,
+    input  wire [               15:0] s_axis_tkeep,
+    input  wire                       s_axis_tlast,   // 外部传入的一帧最后一个点标志
+
+    // -----------------------------------------------------------
+    // AXI4-Stream Master (输出 Voxel 特征)
+    // -----------------------------------------------------------
+    output wire [PT_WIDTH*OUT_PT_DIM-1:0] m_axis_tdata,
+    output wire                           m_axis_tvalid,
+    output wire [                  127:0] m_axis_tkeep,   // <--- 新增 TKEEP 信号
+    input  wire                           m_axis_tready,  // 内部暂不支持背压，可预留
+    output wire                           m_axis_tlast,   // 帧处理彻底结束 (由 flush_done 驱动)
+
+    // 自定义侧边通道 (可依据需求打包进 TUSER)
+    output wire [COORD_WIDTH-1:0] m_axis_voxel_x,
+    output wire [COORD_WIDTH-1:0] m_axis_voxel_y,
+    output wire                   m_axis_voxel_valid,
+    // -----------------------------------------------------------
+    // 控制接口 (可由 PS 端的 GPIO 触发，或自己写个简单的启动状态机)
+    // -----------------------------------------------------------
+    input  wire                   start_req,           // 上升沿触发一次“读一帧”的操作
+    output reg                    idle,                // 模块是否处于空闲状态
+
+    // -----------------------------------------------------------
+    // AXI-Stream Command Interface (连接到 DataMover 的 S_AXIS_MM2S_CMD)
+    // -----------------------------------------------------------
+    output wire        m_axis_cmd_tvalid,
+    input  wire        m_axis_cmd_tready,
+    output wire [71:0] m_axis_cmd_tdata
+);
+
+    localparam HASH_ADDR_WIDTH = $clog2(HASH_TABLE_SIZE);
+    // 时钟复位内部映射
+    wire clk_p = aclk;
+    wire rst_n = aresetn;
+
     // =========================================================================
-    reg frame_end_raw;
-    reg read_done_flag;
+    // 帧尾信号 (Frame End) 生成与延迟补偿
+    // =========================================================================
+    // s_axis_tlast 在最后一个点有效时触发
+    wire frame_end_raw = s_axis_tvalid && s_axis_tready && s_axis_tlast;
 
-    always @(posedge clk_p or negedge rst_n) begin
-        if (!rst_n) begin
-            frame_end_raw <= 1'b0;
-            read_done_flag <= 1'b0;
-        end else begin
-            // 核心条件：当读地址等于 MEM_FILE_LENGTH，且之前没触发过
-            if ((dram_read_address == MEM_FILE_LENGTH[DRAM_ADDR_WIDTH-1:0]) && !read_done_flag) begin
-                frame_end_raw <= 1'b1;
-                read_done_flag <= 1'b1; // 锁定，保证只产生一个单周期脉冲
-            end else begin
-                frame_end_raw <= 1'b0;
-            end
-        end
-    end
-
-    // 延迟补偿：让 frame_end 脉冲陪着最后一个点一起走过流水线
     reg [63:0] frame_end_shift;
     always @(posedge clk_p or negedge rst_n) begin
         if (!rst_n) begin
             frame_end_shift <= 64'd0;
-        end else if (!voxel_coordinate_inst.u_hash_table_tombstone.hash_stall) begin // 遇到反压时暂停移位，保持与数据流完全同步
+        end else if (!voxel_coordinate_inst.u_hash_table_tombstone.hash_stall) begin
             frame_end_shift <= {frame_end_shift[62:0], frame_end_raw};
         end
     end
 
-    // 你可以通过查看仿真波形，数一下从 dram 读出到数据进入 hash 表到底差了几拍
-    // 然后调整这里的索引用以对齐 (这里暂时设定为 30 拍)
-    wire frame_end = frame_end_shift[30]; 
+    // 补偿 AXI 流水线深度：具体拍数视内部接收流水线长度而定
+    wire frame_end = frame_end_shift[30];
+
+    // =========================================================================
+    // 内部连线声明
+    // =========================================================================
     wire flush_done;
 
+    wire bram_voxelpoint_clk;
+    wire bram_voxelpoint_wr;
+    wire [BRAM_DATA_WIDTH/8-1:0] bram_voxelpoint_bwen;
+    wire [BRAM_ADDR_WIDTH-1:0] bram_voxelpoint_addr;
+    wire [BRAM_DATA_WIDTH-1:0] bram_voxelpoint_wrdata;
 
-    wire m_axis_dram_last;
-    wire [AXIS_DATA_WIDTH-1:0] m_axis_dram_data;
-    wire m_axis_dram_valid;
-    wire m_axis_dram_ready;
-    // axi stream 读fifo
-    adapter_ram_2_axi_stream #(
-        .AXIS_DATA_WIDTH  (AXIS_DATA_WIDTH),
-        .BRAM_DEPTH       (AXIS_ADDR_WIDTH),
-        .AXIS_STROBE_WIDTH(AXIS_DATA_WIDTH / 8),
-        .USE_KEEP         (0),
-        .USER_DEPTH       (1)
-    ) u_adapter_ram_2_axi_stream (
-        .clk              (clk_p),
-        .rst_n            (rst_n),
-        //Ping Poing FIFO Read Interface
-        .i_axis_user      (),
-        .i_bram_en        (dram_read_en),
-        .i_bram_size      (dram_write_size),
-        .o_bram_addr      (dram_read_address),
-        .i_bram_data      (dram_data_out),
-        //AXI Stream Output
-        .m_axis_dram_user (),
-        .m_axis_dram_ready(m_axis_dram_ready),
-        .m_axis_dram_data (m_axis_dram_data),
-        .m_axis_dram_last (m_axis_dram_last),
-        .m_axis_dram_valid(m_axis_dram_valid)
-    );
+    wire bram_expire_clk_a;
+    wire [BRAM_ADDR_WIDTH-1:0] bram_expire_addr_a;
+    wire [BRAM_DATA_WIDTH-1:0] bram_expire_rdata_a;
 
+    wire bram_expire_clk_b;
+    wire bram_expire_wr_b;
+    wire [BRAM_DATA_WIDTH/8-1:0] bram_expire_bwen_b;
+    wire [BRAM_ADDR_WIDTH-1:0] bram_expire_addr_b;
+    wire [BRAM_DATA_WIDTH-1:0] bram_expire_wrdata_b;
 
-    localparam COORD_WIDTH = 11;
-    localparam PT_WIDTH = 16;
-    localparam VN_WIDTH = 5;
-    localparam EXPAND_PT_DIM = 11;  // x,y,z,intensity,0,(x-mean,y-mean,z-mean,intensity-mean),(x-vmean,y-vmean,z-vmean,intensity-vmean)
-    localparam OUT_PT_DIM = 48;
-    localparam MAX_VOXEL_NUM = 12'd20;
-    localparam HASH_TABLE_SIZE = 256;
-    localparam HASH_ADDR_WIDTH = $clog2(HASH_TABLE_SIZE);  // log2(HASH_TABLE_SIZE)
-    localparam [15:0] THRESHOLD_CLOSE = 16'h0100;  // 1.00m
-    localparam [15:0] THRESHOLD_BOUDARY = 16'h3600;  // 54.00m
-    localparam [15:0] THRESHOLD_BOUDARY_Z_LOW = 16'h5000;  // +5m (-5m)
-    localparam [15:0] THRESHOLD_BOUDARY_Z_HIGH = 16'h3000;  // +3m
-    localparam integer PRE_LAT = 0;  // 预处理固定延迟（拍数占位）
-    localparam [15:0] LIFE_CYCLE = 16'd100;
-    wire                                              bram_voxelpoint_clk;
-    wire                                              bram_voxelpoint_rst;
-    wire                                              bram_voxelpoint_wr;
-    wire [                     BRAM_DATA_WIDTH/8-1:0] bram_voxelpoint_bwen;  // 32-bit Byte Enable
-    wire [                       BRAM_ADDR_WIDTH-1:0] bram_voxelpoint_addr;  // 10-bit Address
-    wire [                       BRAM_DATA_WIDTH-1:0] bram_voxelpoint_wrdata;  // 256-bit Data
-    // expired 写入pfe buffer
-    wire                                              bram_expire_clk_a;
-    // wire                                              bram_expire_rst_a;
-    // wire                                              bram_expire_wr_a;
-    // wire [                     BRAM_DATA_WIDTH/8-1:0] bram_expire_bwen_a;  // 32-bit Byte Enable
-    wire [                       BRAM_ADDR_WIDTH-1:0] bram_expire_addr_a;  // 10-bit Address
-    wire [                       BRAM_DATA_WIDTH-1:0] bram_expire_rdata_a;  // 256-bit Data
-    // expired 读取voxelpoint
-    wire                                              bram_expire_clk_b;
-    wire                                              bram_expire_rst_b;
-    wire                                              bram_expire_wr_b;
-    wire [                     BRAM_DATA_WIDTH/8-1:0] bram_expire_bwen_b;  // 32-bit Byte Enable
-    wire [                       BRAM_ADDR_WIDTH-1:0] bram_expire_addr_b;  // 10-bit Address
-    wire [                       BRAM_DATA_WIDTH-1:0] bram_expire_wrdata_b;  // 256-bit Data
-    wire                                              bram_pfe_clk;
-    // wire                                              bram_pfe_rst_a;
-    // wire                                              bram_pfe_wr_a;
-    // wire [                     BRAM_DATA_WIDTH/8-1:0] bram_pfe_bwen_a;  // 32-bit Byte Enable
-    wire [                       BRAM_ADDR_WIDTH-1:0] bram_pfe_addr;  // 10-bit Address
-    wire [                       BRAM_DATA_WIDTH-1:0] bram_pfe_rdata;  // 256-bit Data
+    wire bram_pfe_clk;
+    wire [BRAM_ADDR_WIDTH-1:0] bram_pfe_addr;
+    wire [BRAM_DATA_WIDTH-1:0] bram_pfe_rdata;
 
-    wire                                              m_axis_expire_tvalid;
-    wire                                              m_axis_expire_tready;
-    wire [2*COORD_WIDTH+BRAM_ADDR_WIDTH+VN_WIDTH-1:0] m_axis_expire_tdata;  // NOTE
+    wire m_axis_expire_tvalid;
+    wire m_axis_expire_tready;
+    wire [2*COORD_WIDTH+BRAM_ADDR_WIDTH+VN_WIDTH-1:0] m_axis_expire_tdata;
+
+    wire m_axis_pfe_valid;
+    wire m_axis_pfe_tready;
+    wire [EXPAND_PT_DIM*PT_WIDTH-1:0] m_axis_pfe_data;
+    wire m_axis_pfe_last;
+    wire m_axis_pfe_voxel_valid;
+    wire signed [COORD_WIDTH-1:0] m_axis_pfe_voxel_x;
+    wire signed [COORD_WIDTH-1:0] m_axis_pfe_voxel_y;
+    wire m_axis_pfe_flush_done;
+
+    wire m_axis_out_voxel_valid;
+    wire signed [COORD_WIDTH-1:0] m_axis_out_voxel_x;
+    wire signed [COORD_WIDTH-1:0] m_axis_out_voxel_y;
+    wire m_axis_out_valid;
+    wire [PT_WIDTH*OUT_PT_DIM-1:0] m_axis_out_data;
+    wire m_axis_out_flush_done;
+
+    wire m_axis_out_tready;
+    assign m_axis_out_tready = m_axis_tready;
+    // =========================================================================
+    // 核心模块实例化
+    // =========================================================================
     voxel_coor_pipe #(
         .AXIS_DATA_WIDTH         (AXIS_DATA_WIDTH),
-        .AXIS_ADDR_WIDTH         (AXIS_ADDR_WIDTH),
+        .AXIS_ADDR_WIDTH         (BRAM_ADDR_WIDTH),           // 根据需要调整
         .BRAM_DATA_WIDTH         (BRAM_DATA_WIDTH),
         .BRAM_ADDR_WIDTH         (BRAM_ADDR_WIDTH),
         .HASH_ADDR_WIDTH         (HASH_ADDR_WIDTH),
@@ -165,47 +159,35 @@ module voxelize #(
         .frame_end (frame_end),
         .flush_done(flush_done),
 
-        // AXI Stream Slave (Input)
-        .s_axis_dram_data      (m_axis_dram_data),
-        .s_axis_dram_keep      (),
-        .s_axis_dram_last      (m_axis_dram_last),
-        .s_axis_dram_valid     (m_axis_dram_valid),
-        .s_axis_dram_ready     (m_axis_dram_ready),
+        // AXI Stream Slave (直接接入顶层输入总线)
+        .s_axis_dram_data (s_axis_tdata),
+        .s_axis_dram_keep (),               // 可忽略
+        .s_axis_dram_last (s_axis_tlast),
+        .s_axis_dram_valid(s_axis_tvalid),
+        .s_axis_dram_ready(s_axis_tready),
+
         .bram_voxelpoint_clk   (bram_voxelpoint_clk),
         .bram_voxelpoint_rst   (),
         .bram_voxelpoint_wr    (bram_voxelpoint_wr),
         .bram_voxelpoint_bwen  (bram_voxelpoint_bwen),
         .bram_voxelpoint_addr  (bram_voxelpoint_addr),
         .bram_voxelpoint_wrdata(bram_voxelpoint_wrdata),
-        .bram_expire_clk_a     (bram_expire_clk_a),
-        // .bram_expire_rst_a     (),
-        // .bram_expire_wr_a      (bram_expire_wr_a),
-        // .bram_expire_bwen_a    (bram_expire_bwen_a),
-        .bram_expire_addr_a    (bram_expire_addr_a),
-        .bram_expire_rdata_a   (bram_expire_rdata_a),
-        .bram_expire_clk_b     (bram_expire_clk_b),
-        .bram_expire_rst_b     (),
-        .bram_expire_wr_b      (bram_expire_wr_b),
-        .bram_expire_bwen_b    (bram_expire_bwen_b),
-        .bram_expire_addr_b    (bram_expire_addr_b),
-        .bram_expire_wrdata_b  (bram_expire_wrdata_b),
-        .m_axis_expire_tdata   (m_axis_expire_tdata),
-        .m_axis_expire_tvalid  (m_axis_expire_tvalid),
-        .m_axis_expire_tready  (m_axis_expire_tready)
+
+        .bram_expire_clk_a   (bram_expire_clk_a),
+        .bram_expire_addr_a  (bram_expire_addr_a),
+        .bram_expire_rdata_a (bram_expire_rdata_a),
+        .bram_expire_clk_b   (bram_expire_clk_b),
+        .bram_expire_rst_b   (),
+        .bram_expire_wr_b    (bram_expire_wr_b),
+        .bram_expire_bwen_b  (bram_expire_bwen_b),
+        .bram_expire_addr_b  (bram_expire_addr_b),
+        .bram_expire_wrdata_b(bram_expire_wrdata_b),
+
+        .m_axis_expire_tdata (m_axis_expire_tdata),
+        .m_axis_expire_tvalid(m_axis_expire_tvalid),
+        .m_axis_expire_tready(m_axis_expire_tready)
     );
 
-    wire                                     bram_clk_b;
-    wire                                     bram_rst_b;
-    wire        [       BRAM_ADDR_WIDTH-1:0] bram_addr_b;
-    wire                                     bram_en_b;
-    wire        [       BRAM_DATA_WIDTH-1:0] bram_rdata_b;
-    wire                                     m_axis_pfe_valid;
-    wire                                     m_axis_pfe_tready;
-    wire        [EXPAND_PT_DIM*PT_WIDTH-1:0] m_axis_pfe_data;
-    wire                                     m_axis_pfe_last;
-    wire                                     m_axis_pfe_voxel_valid;
-    wire signed [           COORD_WIDTH-1:0] m_axis_pfe_voxel_x;
-    wire signed [           COORD_WIDTH-1:0] m_axis_pfe_voxel_y;
     pfe #(
         .COORD_WIDTH    (COORD_WIDTH),
         .PT_WIDTH       (PT_WIDTH),
@@ -215,45 +197,39 @@ module voxelize #(
         .BRAM_DATA_WIDTH(BRAM_DATA_WIDTH),
         .BRAM_ADDR_WIDTH(BRAM_ADDR_WIDTH)
     ) u_pfe (
-        .clk                   (clk_p),
-        .rst_n                 (rst_n),
-        .s_axis_expire_tvalid  (m_axis_expire_tvalid),
-        .s_axis_expire_tready  (m_axis_expire_tready),
-        .s_axis_expire_tdata   (m_axis_expire_tdata),
-        .bram_pfe_clk          (bram_pfe_clk),
-        // .bram_pfe_rst        (bram_pfe_rst),
-        .bram_pfe_addr         (bram_pfe_addr),
-        // .bram_pfe_en         (bram_pfe_en),
-        .bram_pfe_rdata        (bram_pfe_rdata),
+        .clk                 (clk_p),
+        .rst_n               (rst_n),
+        .s_axis_expire_tvalid(m_axis_expire_tvalid),
+        .s_axis_expire_tready(m_axis_expire_tready),
+        .s_axis_expire_tdata (m_axis_expire_tdata),
+
+        .bram_pfe_clk  (bram_pfe_clk),
+        .bram_pfe_addr (bram_pfe_addr),
+        .bram_pfe_rdata(bram_pfe_rdata),
+
         .m_axis_pfe_valid      (m_axis_pfe_valid),
         .m_axis_pfe_tready     (m_axis_pfe_tready),
         .m_axis_pfe_data       (m_axis_pfe_data),
         .m_axis_pfe_last       (m_axis_pfe_last),
         .m_axis_pfe_voxel_valid(m_axis_pfe_voxel_valid),
         .m_axis_pfe_voxel_x    (m_axis_pfe_voxel_x),
-        .m_axis_pfe_voxel_y    (m_axis_pfe_voxel_y)
+        .m_axis_pfe_voxel_y    (m_axis_pfe_voxel_y),
+        .m_axis_pfe_flush_done (m_axis_pfe_flush_done),
+        .flush_done            (flush_done)
     );
 
-    localparam WEIGHT_WIDTH = 16;
-    localparam ACC_WIDTH = 32;
-    wire                          m_axis_out_voxel_valid;
-    wire signed [COORD_WIDTH-1:0] m_axis_out_voxel_x;
-    wire signed [COORD_WIDTH-1:0] m_axis_out_voxel_y;
-    // wire [PT_WIDTH*OUT_PT_DIM-1:0] m_axis_end_data;
-    // assign m_axis_end_data_part = m_axis_end_data[16-1:0];
     pfn_layer #(
         .EXPAND_PT_DIM  (EXPAND_PT_DIM),
         .COORD_WIDTH    (COORD_WIDTH),
-        // .OUT_PT_DIM     (OUT_PT_DIM),
+        .OUT_PT_DIM     (OUT_PT_DIM),
         .PT_WIDTH       (PT_WIDTH),
-        .MEM_WEIGHT_FILE("E:\\mmdetection3d\\my_output_parameters\\pfn_weight.mem"),
-        .MEM_BIAS_FILE  ("E:\\mmdetection3d\\my_output_parameters\\bias.mem"),
-        .WEIGHT_WIDTH   (WEIGHT_WIDTH),
-        .ACC_WIDTH      (ACC_WIDTH)
+        .MEM_WEIGHT_FILE(MEM_WEIGHT_FILE),
+        .MEM_BIAS_FILE  (MEM_BIAS_FILE),
+        .WEIGHT_WIDTH   (16),
+        .ACC_WIDTH      (32)
     ) u_pfn_layer (
         .clk                   (clk_p),
         .rst_n                 (rst_n),
-        // 从上一级模块接收单个点的接口
         .s_axis_pfe_valid      (m_axis_pfe_valid),
         .s_axis_pfe_tready     (m_axis_pfe_tready),
         .s_axis_pfe_data       (m_axis_pfe_data),
@@ -261,22 +237,25 @@ module voxelize #(
         .s_axis_pfe_voxel_valid(m_axis_pfe_voxel_valid),
         .s_axis_pfe_voxel_x    (m_axis_pfe_voxel_x),
         .s_axis_pfe_voxel_y    (m_axis_pfe_voxel_y),
+        .s_axis_pfe_flush_done (m_axis_pfe_flush_done),
+
         .m_axis_out_voxel_valid(m_axis_out_voxel_valid),
         .m_axis_out_voxel_x    (m_axis_out_voxel_x),
         .m_axis_out_voxel_y    (m_axis_out_voxel_y),
-        // 最终池化后的输出
         .m_axis_out_valid      (m_axis_out_valid),
-        .m_axis_out_data_bit   (m_axis_out_data_bit)
-
+        .m_axis_out_tready     (m_axis_out_tready),
+        .m_axis_out_data       (m_axis_out_data),
+        .m_axis_out_flush_done (m_axis_out_flush_done)
     );
 
+    // =========================================================================
+    // 内部 BRAM 实例化 (保持原样)
+    // =========================================================================
     dualport_bram #(
-        .DATA_WIDTH     (BRAM_DATA_WIDTH),
-        .ADDR_WIDTH     (BRAM_ADDR_WIDTH),
-        .MEM_FILE       ("NOTHING"),
-        .MEM_FILE_LENGTH()
+        .DATA_WIDTH(BRAM_DATA_WIDTH),
+        .ADDR_WIDTH(BRAM_ADDR_WIDTH),
+        .MEM_FILE  ("NOTHING")
     ) u_voxelpoint_bram (
-        // 写
         .a_clk (bram_voxelpoint_clk),
         .a_wr  (bram_voxelpoint_wr),
         .a_en  (1'b1),
@@ -284,24 +263,20 @@ module voxelize #(
         .a_addr(bram_voxelpoint_addr),
         .a_din (bram_voxelpoint_wrdata),
         .a_dout(),
-        // 读出放到pfe buffer
         .b_clk (bram_expire_clk_a),
-        .b_wr  (1'b0),                    // only read
+        .b_wr  (1'b0),
         .b_en  (1'b1),
-        .b_bwen(1'b0),                    // only read
+        .b_bwen(1'b0),
         .b_addr(bram_expire_addr_a),
         .b_din (),
         .b_dout(bram_expire_rdata_a)
     );
 
-    // PFE voxelpoint buffer 
     dualport_bram_2delay #(
-        .DATA_WIDTH     (BRAM_DATA_WIDTH),
-        .ADDR_WIDTH     (BRAM_ADDR_WIDTH),
-        .MEM_FILE       ("NOTHING"),
-        .MEM_FILE_LENGTH()
+        .DATA_WIDTH(BRAM_DATA_WIDTH),
+        .ADDR_WIDTH(BRAM_ADDR_WIDTH),
+        .MEM_FILE  ("NOTHING")
     ) u_pfe_bram (
-        // voxel_coor_pipe 中的 expired_manager 写入待PFE的voxelpoint
         .a_clk (bram_expire_clk_b),
         .a_wr  (bram_expire_wr_b),
         .a_en  (1'b1),
@@ -309,15 +284,95 @@ module voxelize #(
         .a_addr(bram_expire_addr_b),
         .a_din (bram_expire_wrdata_b),
         .a_dout(),
-        // pfe 读取voxelpoint进行特征提取
         .b_clk (bram_pfe_clk),
-        .b_wr  (1'b0),                  // only read
+        .b_wr  (1'b0),
         .b_en  (1'b1),
-        .b_bwen(1'b0),                  // only read
+        .b_bwen(1'b0),
         .b_addr(bram_pfe_addr),
         .b_din (),
         .b_dout(bram_pfe_rdata)
     );
+
+    // =========================================================================
+    // AXI4-Stream 输出信号映射 (768-bit 填充至 1024-bit)
+    // =========================================================================
+    // 768-bit = 96 Bytes. 1024-bit = 128 Bytes.
+    // 高 256-bit (32 Bytes) 补零填充，对应的 TKEEP 拉低标为无效。
+
+    assign m_axis_tdata       = {256'd0, m_axis_out_data};
+    assign m_axis_tkeep       = {32'd0, {96{1'b1}}};  // 低 96 个 bit 全为 1，高 32 bit 全为 0
+
+    assign m_axis_tvalid      = m_axis_out_valid;
+    // pfn_layer 完全排空标志映射为 TLAST 给下游
+    assign m_axis_tlast       = m_axis_out_flush_done;
+
+    assign m_axis_voxel_x     = m_axis_out_voxel_x;
+    assign m_axis_voxel_y     = m_axis_out_voxel_y;
+    assign m_axis_voxel_valid = m_axis_out_voxel_valid;
+
+
+
+
+    reg valid_reg;
+    reg start_d1;
+
+    // 上升沿检测
+    always @(posedge aclk or negedge aresetn) begin
+        if (!aresetn) begin
+            start_d1 <= 1'b0;
+        end else begin
+            start_d1 <= start_req;
+        end
+    end
+    wire start_pulse = start_req && !start_d1;
+
+    // =======================================================
+    // 拼装 AXI DataMover MM2S Command (72-bit 格式)
+    // =======================================================
+    // [22:0]  BTT (Bytes To Transfer) = 一帧的总字节数
+    // [23]    Type = 1 (INCR 递增突发)
+    // [29:24] DSA (Dynamic Source Address) = 0
+    // [30]    EOF = 1 (发完这批数据后在 TLAST 标志位拉高)
+    // [31]    DRR = 0 (Data Routing 禁用)
+    // [63:32] SADDR = 源地址 (DDR 物理地址)
+    // [67:64] TAG = 0
+    // [71:68] RSVD = 0
+    assign m_axis_cmd_tdata = {
+        4'b0000,  // [71:68] RSVD
+        4'b0000,  // [67:64] TAG
+        BASE_ADDR,  // [63:32] SADDR
+        1'b0,  // [31]    DRR
+        1'b1,             // [30]    EOF  <-- 这个很重要，它会让 DataMover 在最后一个字自动产生 TLAST 发给你的 voxelize
+        6'b000000,  // [29:24] DSA
+        1'b1,  // [23]    Type
+        FRAME_BYTES  // [22:0]  BTT
+    };
+
+    assign m_axis_cmd_tvalid = valid_reg;
+
+    // =======================================================
+    // 命令发送握手状态机
+    // =======================================================
+    always @(posedge aclk or negedge aresetn) begin
+        if (!aresetn) begin
+            valid_reg <= 1'b0;
+            idle      <= 1'b1;
+        end else begin
+            if (idle) begin
+                // 收到启动脉冲，拉高 valid 准备发送命令
+                if (start_pulse) begin
+                    valid_reg <= 1'b1;
+                    idle      <= 1'b0;
+                end
+            end else begin
+                // 如果 DataMover 准备好了，且 valid 已拉高，则握手成功
+                if (valid_reg && m_axis_cmd_tready) begin
+                    valid_reg <= 1'b0;
+                    idle      <= 1'b1;  // 发送完成，回到空闲，等待下一次触发
+                end
+            end
+        end
+    end
 
 
 endmodule

@@ -6,7 +6,7 @@ module voxel_coor_pipe #(
     parameter integer        HASH_ADDR_WIDTH          = 8,         // log2(HASH_TABLE_SIZE)
     parameter         [15:0] THRESHOLD_CLOSE          = 16'h0100,  // 1.00m
     parameter         [15:0] THRESHOLD_BOUDARY        = 16'h3600,  // 54.00m
-    parameter         [15:0] THRESHOLD_BOUDARY_Z_LOW  = 16'hB000,  // -5m
+    parameter         [15:0] THRESHOLD_BOUDARY_Z_LOW  = 16'h5000,  // -(-5)m
     parameter         [15:0] THRESHOLD_BOUDARY_Z_HIGH = 16'h3000,  // +3m
     parameter integer        PRE_LAT                  = 0,         // 预处理固定延迟（拍数占位）
     parameter         [15:0] LIFE_CYCLE               = 16'd100
@@ -82,7 +82,7 @@ module voxel_coor_pipe #(
     // 1/0 : 当前点不在有效范围内
     // 0/? : 当前点无效，且没有新点进来，等待s_fire握手
     // 1/1/0 : 当前点有效，但 hash 表未准备好
-    wire                          upstream_can_accept = (!point_raw_vld) || (!keep_point) || hash_fire;
+    wire                          upstream_can_accept;
     assign s_axis_dram_ready = upstream_can_accept;
 
     always @(posedge clk or negedge rst_n) begin
@@ -232,6 +232,8 @@ module voxel_coor_pipe #(
             //     keep_point <= 1'b0;
             // end else if ((ABS_pt_x_fix16 <= THRESHOLD_CLOSE) && (ABS_pt_y_fix16 <= THRESHOLD_CLOSE)) begin
             //     keep_point <= 1'b0;
+        end else if (^pt_x_fix16 === 1'bx || point_raw == 0) begin
+            keep_point = 1'b0;
         end else if (ABS_pt_x_fix16 > THRESHOLD_BOUDARY || ABS_pt_y_fix16 > THRESHOLD_BOUDARY) begin
             keep_point = 1'b0;
         end else if (pt_z_fix16[15] ? (ABS_pt_z_fix16 > THRESHOLD_BOUDARY_Z_LOW) :
@@ -243,13 +245,39 @@ module voxel_coor_pipe #(
     end
 
     // point_proc 组合值（Q8.8 拼起来）
-    wire [4*PT_WIDTH-1:0] point_proc_comb = {pt_x_fix16, pt_y_fix16, pt_z_fix16, pt_intensity_fix16};
-
-    assign hash_req_valid = point_raw_vld && keep_point;
+    wire [ 4*PT_WIDTH-1:0] point_proc_comb = {pt_x_fix16, pt_y_fix16, pt_z_fix16, pt_intensity_fix16};
 
     // Hash 表的输入数据
-    wire [    VOXEL_WIDTH-1:0] hash_key_x = voxel_x;
-    wire [    VOXEL_WIDTH-1:0] hash_key_y = voxel_y;
+    reg                    pipe1_valid;
+    reg  [VOXEL_WIDTH-1:0] pipe1_voxel_x;
+    reg  [VOXEL_WIDTH-1:0] pipe1_voxel_y;
+    reg  [           63:0] pipe1_point_proc;
+    reg                    pipe1_keep_point;
+    assign hash_req_valid = pipe1_valid;
+    wire [VOXEL_WIDTH-1:0] hash_key_x = pipe1_voxel_x;
+    wire [VOXEL_WIDTH-1:0] hash_key_y = pipe1_voxel_y;
+    // 反压握手逻辑 (Stall logic)
+    // 如果 pipe1 有效数据且下游哈希表没准备好，则堵塞上游
+    wire                   pipe1_stall = pipe1_valid && !hash_fire;
+    assign upstream_can_accept = !pipe1_stall;
+
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            pipe1_valid <= 1'b0;
+            pipe1_keep_point <= 1'b0;
+        end else begin
+            if (!pipe1_stall) begin
+                // 上游数据有效且在有效范围内，传递有效信号
+                pipe1_valid <= point_raw_vld && keep_point;
+                pipe1_keep_point <= keep_point;
+
+                // 将算好的体素坐标和点特征打入寄存器
+                pipe1_voxel_x <= voxel_x;
+                pipe1_voxel_y <= voxel_y;
+                pipe1_point_proc <= point_proc_comb;
+            end
+        end
+    end
 
     wire                       hash_found;
     wire                       hash_busy;
@@ -303,10 +331,8 @@ module voxel_coor_pipe #(
     reg pproc_drop_d1, pproc_drop_d2, pproc_drop_d3;
     reg hash_req_ready_1delay, hash_req_ready_2delay;
 
-
     wire pipe_pproc_stall = hash_req_ready;
     wire pipe_bram_stall = hash_req_ready_1delay;
-
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             pproc_d1 <= 64'd0;
@@ -317,15 +343,15 @@ module voxel_coor_pipe #(
             pproc_drop_d3 <= 1'b0;
         end else if (pipe_pproc_stall) begin  // pproc_d3需要和 hash_out_idx对齐
             // pproc_vld_d1 <= (hash_fire | u_hash_table_tombstone.kill_expired);
-            pproc_drop_d1 <= !keep_point;
+            pproc_drop_d1 <= !pipe1_keep_point;
             pproc_drop_d2 <= pproc_drop_d1;
             pproc_drop_d3 <= pproc_drop_d2;
 
-            pproc_d1 <= point_proc_comb;
+            pproc_d1 <= pipe1_point_proc;
             pproc_d2 <= pproc_d1;
             pproc_d3 <= pproc_d2;
 
-            pproc_d1_voxel <= {voxel_x, voxel_y};
+            pproc_d1_voxel <= {pipe1_voxel_x, pipe1_voxel_y};
             pproc_d2_voxel <= pproc_d1_voxel;
             pproc_d3_voxel <= pproc_d2_voxel;
         end
@@ -345,7 +371,8 @@ module voxel_coor_pipe #(
     // 7) BRAM 地址/槽位计算（修正：加入 (point_number-1)>>2 与 slot 0-based）
     // ------------------------------------------------------------
     wire [BRAM_ADDR_WIDTH-1:0] bram_row_addr = (hash_out_idx * EXPEND_VOXEL_ROW) + ((hash_out_point_number > POINTS_PER_ROW) ? {{(BRAM_ADDR_WIDTH-1){1'b0}}, 1'b1} : {(BRAM_ADDR_WIDTH-1){1'b0}});
-    wire [3:0] bram_slot_idx = (hash_out_point_number - {{(VN_WIDTH - 1) {1'b0}}, 1'b1}) % POINTS_PER_ROW;  // 0..3
+    wire [4:0] pt_idx_minus_1 = hash_out_point_number - {{(VN_WIDTH - 1) {1'b0}}, 1'b1};
+    wire [3:0] bram_slot_idx = (pt_idx_minus_1 >= 5'd10) ? (pt_idx_minus_1 - 5'd10) : pt_idx_minus_1[3:0];
 
     function [BRAM_DATA_WIDTH/8-1:0] slot_bwen_64;
         input [3:0] slot;
@@ -380,9 +407,11 @@ module voxel_coor_pipe #(
         end
     end
 
+
+
+
+
 `ifndef SYNTHESIS
-
-
     // ===================================================================
     // 🚦 仿真专用监控探针：点云坐标与 Intensity 有效范围检测
     // ===================================================================

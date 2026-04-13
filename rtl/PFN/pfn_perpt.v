@@ -2,42 +2,36 @@ module pfn_layer #(
     parameter EXPAND_PT_DIM   = 11,
     parameter COORD_WIDTH     = 11,
     parameter OUT_PT_DIM      = 48,
-    parameter PT_WIDTH        = 16,         // 输入数据位宽
+    parameter PT_WIDTH        = 16,
     parameter MEM_WEIGHT_FILE = "NOTHING",
     parameter MEM_BIAS_FILE   = "NOTHING",
-    parameter WEIGHT_WIDTH    = 16,         // 权重位宽 (通常量化为 INT8)
-    parameter ACC_WIDTH       = 32          // 累加器位宽
+    parameter WEIGHT_WIDTH    = 16,
+    parameter ACC_WIDTH       = 32
 ) (
     input wire clk,
     input wire rst_n,
 
-    // =======================================================
-    // 新增 tready 信号，用于给前级 PFE 施加反压
-    // 因为处理一个点需要 2 拍，上游不能每一拍都送新数据
-    // =======================================================
-    output wire s_axis_pfe_tready,
-    input wire s_axis_pfe_valid,
-    input wire [EXPAND_PT_DIM*PT_WIDTH-1:0] s_axis_pfe_data,  // Q8.8
-    input wire s_axis_pfe_last,  // 指示该点是否为当前 Voxel 的最后一个点
-    input wire s_axis_pfe_voxel_valid,
-    input wire signed [COORD_WIDTH-1:0] s_axis_pfe_voxel_x,
-    input wire signed [COORD_WIDTH-1:0] s_axis_pfe_voxel_y,
-
-
-    // 最终池化后的输出
-    output reg                                  m_axis_out_voxel_valid,
-    output reg signed [        COORD_WIDTH-1:0] m_axis_out_voxel_x,
-    output reg signed [        COORD_WIDTH-1:0] m_axis_out_voxel_y,
-    output reg                                  m_axis_out_valid,
-    output reg        [OUT_PT_DIM*PT_WIDTH-1:0] m_axis_out_data,
-    output wire                                 m_axis_out_data_bit      // 仅用于仿真观察输出数据
+    output wire                                     s_axis_pfe_tready,
+    input  wire                                     s_axis_pfe_valid,
+    input  wire        [EXPAND_PT_DIM*PT_WIDTH-1:0] s_axis_pfe_data,
+    input  wire                                     s_axis_pfe_last,
+    input  wire                                     s_axis_pfe_voxel_valid,
+    input  wire signed [           COORD_WIDTH-1:0] s_axis_pfe_voxel_x,
+    input  wire signed [           COORD_WIDTH-1:0] s_axis_pfe_voxel_y,
+    input  wire                                     s_axis_pfe_flush_done,
+    // output
+    output reg                                      m_axis_out_voxel_valid,
+    output reg signed  [           COORD_WIDTH-1:0] m_axis_out_voxel_x,
+    output reg signed  [           COORD_WIDTH-1:0] m_axis_out_voxel_y,
+    output reg                                      m_axis_out_valid,
+    input  wire                                     m_axis_out_tready,
+    output reg         [   OUT_PT_DIM*PT_WIDTH-1:0] m_axis_out_data,
+    output wire                                     m_axis_out_flush_done
 );
-
-    assign m_axis_out_data_bit = (m_axis_out_data == {OUT_PT_DIM * PT_WIDTH{1'b1}}) ? 1'b1 : 1'b0;
 
     localparam HALF_OUT_DIM = OUT_PT_DIM / 2;  // 24
 
-    // 1. 权重与偏置 ROM
+    // 1. 权重与偏置 ROM 
     reg signed [EXPAND_PT_DIM*WEIGHT_WIDTH-1:0] weight_row_rom[0:OUT_PT_DIM-1];
     reg signed [ACC_WIDTH-1:0] bias_rom[0:OUT_PT_DIM-1];
 
@@ -53,129 +47,290 @@ module pfn_layer #(
     end
 
     // =======================================================
-    // 时分复用控制与输入锁存
+    // 级联流水线 Stage 1: 输入锁存与乘法运算 (打一拍)
+    // 修复：乘法器操作数提前 Mux，强制复用 DSP 硬件
     // =======================================================
     reg phase;  // 0: 处理通道 0~23, 1: 处理通道 24~47
-    assign s_axis_pfe_tready = (phase == 0);  // 只有 phase 0 才允许接收新数据
+    assign s_axis_pfe_tready = (phase == 0);
 
-    // 在 phase 0 接收到数据时，锁存供 phase 1 使用
-    reg [EXPAND_PT_DIM*PT_WIDTH-1:0] latched_pfe_data;
-    reg latched_last;
-    reg latched_voxel_valid;
-    reg signed [COORD_WIDTH-1:0] latched_voxel_x;
-    reg signed [COORD_WIDTH-1:0] latched_voxel_y;
+    // 输入数据的第一级元数据锁存
+    reg        [EXPAND_PT_DIM*PT_WIDTH-1:0] latched_pfe_data;
+    reg                                     latched_last;
+    reg                                     latched_voxel_valid;
+    reg signed [           COORD_WIDTH-1:0] latched_voxel_x;
+    reg signed [           COORD_WIDTH-1:0] latched_voxel_y;
 
-    // 当前计算使用的数据流选择：0拍用输入线上的，1拍用锁存的
-    wire [EXPAND_PT_DIM*PT_WIDTH-1:0] current_data = (phase == 0) ? s_axis_pfe_data : latched_pfe_data;
+    // 伴随数据向下游流动的控制信号
+    reg                                     st2_valid;
+    reg                                     st2_phase;
+    reg                                     st2_last;
+    reg                                     st2_voxel_valid;
+    reg signed [           COORD_WIDTH-1:0] st2_voxel_x;
+    reg signed [           COORD_WIDTH-1:0] st2_voxel_y;
 
-    // =======================================================
-    // 硬件实例化: 仅需 24 组 MAC 和 ReLU，减少 50% DSP
-    // =======================================================
-    reg signed [ACC_WIDTH-1:0] mac_comb[0:HALF_OUT_DIM-1];
-    reg [PT_WIDTH-1:0] relu_comb[0:HALF_OUT_DIM-1];
-    reg signed [63:0] dequant_temp;  // 用于修复之前的编译 Bug
+    // --- 核心修改：新增组合逻辑 Mux 提取操作数 ---
+    reg signed [              PT_WIDTH-1:0] op_data             [0:EXPAND_PT_DIM-1];
+    reg signed [          WEIGHT_WIDTH-1:0] op_weight           [ 0:HALF_OUT_DIM-1] [0:EXPAND_PT_DIM-1];
+    reg signed [             ACC_WIDTH-1:0] op_bias             [ 0:HALF_OUT_DIM-1];
 
-    integer j, k;
+    integer i_k, i_j;  // 组合逻辑专用循环变量
     always @(*) begin
-        for (j = 0; j < HALF_OUT_DIM; j = j + 1) begin
-            // 依据当前 phase 读取不同半区的 Bias 和 Weight
-            mac_comb[j] = ($signed(bias_rom[phase?j+HALF_OUT_DIM : j]) <<< 8);
-            for (k = 0; k < EXPAND_PT_DIM; k = k + 1) begin
-                mac_comb[j] = mac_comb[j] + $signed(current_data[k*PT_WIDTH+:PT_WIDTH]) *
-                    $signed(weight_row_rom[phase?j+HALF_OUT_DIM : j][k*WEIGHT_WIDTH+:WEIGHT_WIDTH]);
+        // 1. Mux 选择乘法器的 数据输入 (11个维度)
+        for (i_k = 0; i_k < EXPAND_PT_DIM; i_k = i_k + 1) begin
+            op_data[i_k] = (phase == 0) ? $signed(s_axis_pfe_data[i_k*PT_WIDTH+:PT_WIDTH]) :
+                $signed(latched_pfe_data[i_k*PT_WIDTH+:PT_WIDTH]);
+        end
+
+        // 2. Mux 选择乘法器的 权重输入 和 加法器的 Bias 输入 (24个输出通道)
+        for (i_j = 0; i_j < HALF_OUT_DIM; i_j = i_j + 1) begin
+            op_bias[i_j] = (phase == 0) ? ($signed(bias_rom[i_j]) <<< 8) : ($signed(bias_rom[i_j+HALF_OUT_DIM]) <<< 8);
+
+            for (i_k = 0; i_k < EXPAND_PT_DIM; i_k = i_k + 1) begin
+                op_weight[i_j][i_k] = (phase == 0) ? $signed(weight_row_rom[i_j][i_k*WEIGHT_WIDTH+:WEIGHT_WIDTH]) :
+                    $signed(weight_row_rom[i_j+HALF_OUT_DIM][i_k*WEIGHT_WIDTH+:WEIGHT_WIDTH]);
             end
-
-            // 修复 Bug：在组合逻辑内部做反量化乘法
-            dequant_temp = mac_comb[j] * 994;
-
-            if (mac_comb[j] < 0) relu_comb[j] = 0;  // ReLU 激活
-            else relu_comb[j] = dequant_temp[PT_WIDTH+20-1 : 20];  // 乘以994后右移20位
         end
     end
 
-    // =======================================================
-    // 时序更新逻辑: Max Pool 与 数据输出
-    // =======================================================
-    reg signed [PT_WIDTH-1:0] max_pool_regs[0:OUT_PT_DIM-1];
-    integer oc;
+    // --- 核心流水线寄存器 (Pipeline Registers) ---
+    // 添加综合属性：强制要求 Vivado 将此数组映射为 DSP48 的内部寄存器
+    (* use_dsp = "yes" *)reg signed [ACC_WIDTH-1:0] st2_mult[0:HALF_OUT_DIM-1] [0:EXPAND_PT_DIM-1];
+    reg signed [ACC_WIDTH-1:0] st2_bias[0:HALF_OUT_DIM-1];
 
+    integer j, k;  // 时序逻辑专用循环变量
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             phase <= 1'b0;
+            st2_valid <= 1'b0;
+            st2_phase <= 1'b0;
             latched_last <= 1'b0;
             latched_voxel_valid <= 1'b0;
-            latched_voxel_x <= {COORD_WIDTH{1'b0}};
-            latched_voxel_y <= {COORD_WIDTH{1'b0}};
-            latched_pfe_data <= 0;
-
-            for (oc = 0; oc < OUT_PT_DIM; oc = oc + 1) begin
-                max_pool_regs[oc] <= 0;
-            end
-
-            m_axis_out_valid <= 1'b0;
-            m_axis_out_data <= 0;
-            m_axis_out_voxel_valid <= 1'b0;
-            m_axis_out_voxel_x <= {COORD_WIDTH{1'b0}};
-            m_axis_out_voxel_y <= {COORD_WIDTH{1'b0}};
         end else begin
-            // 默认 Valid 拉低，形成单周期脉冲
-            m_axis_out_valid <= 1'b0;
-            m_axis_out_voxel_valid <= 1'b0;
-
             if (phase == 0) begin
-                // 【周期 1】收到有效输入，执行前半区 (0~23) 运算
                 if (s_axis_pfe_valid) begin
-                    // 锁存元数据给下一个周期使用
+                    phase               <= 1'b1;  // 下一拍处理后半区
+
+                    // 锁存供 Phase 1 用的数据
                     latched_pfe_data    <= s_axis_pfe_data;
                     latched_last        <= s_axis_pfe_last;
                     latched_voxel_valid <= s_axis_pfe_voxel_valid;
                     latched_voxel_x     <= s_axis_pfe_voxel_x;
                     latched_voxel_y     <= s_axis_pfe_voxel_y;
 
-                    // 更新前半区 (0~23) 的 Max Pool
+                    // 传递控制信号
+                    st2_valid           <= 1'b1;
+                    st2_phase           <= 1'b0;
+                    st2_last            <= s_axis_pfe_last;
+                    st2_voxel_valid     <= s_axis_pfe_voxel_valid;
+                    st2_voxel_x         <= s_axis_pfe_voxel_x;
+                    st2_voxel_y         <= s_axis_pfe_voxel_y;
+
+                    // --- 统一乘法运算：硬件将被完美复用 ---
+                    for (j = 0; j < HALF_OUT_DIM; j = j + 1) begin
+                        st2_bias[j] <= op_bias[j];
+                        for (k = 0; k < EXPAND_PT_DIM; k = k + 1) begin
+                            st2_mult[j][k] <= op_data[k] * op_weight[j][k];
+                        end
+                    end
+                end else begin
+                    st2_valid <= 1'b0;
+                end
+            end else begin
+                // phase == 1 时
+                phase           <= 1'b0;  // 一点处理完毕，回到接收新点状态
+
+                // 传递控制信号
+                st2_valid       <= 1'b1;
+                st2_phase       <= 1'b1;
+                st2_last        <= latched_last;
+                st2_voxel_valid <= latched_voxel_valid;
+                st2_voxel_x     <= latched_voxel_x;
+                st2_voxel_y     <= latched_voxel_y;
+
+                // --- 统一乘法运算：这里代码和 Phase 0 完全一致！ ---
+                // Vivado 会识别出它与 Phase 0 共享了同一个算术单元，只会生成 24x11 个乘法器
+                for (j = 0; j < HALF_OUT_DIM; j = j + 1) begin
+                    st2_bias[j] <= op_bias[j];
+                    for (k = 0; k < EXPAND_PT_DIM; k = k + 1) begin
+                        st2_mult[j][k] <= op_data[k] * op_weight[j][k];
+                    end
+                end
+            end
+        end
+    end
+
+    // =======================================================
+    // 级联流水线 Stage 2: 强制加法树 (打一拍，寄存器命名为 st3)
+    // 目标：将乘法结果求和，并锁存到寄存器，斩断时序长路径
+    // =======================================================
+    // 伴随数据向下游流动的 st3 控制信号
+    reg st3_valid;
+    reg st3_phase;
+    reg st3_last;
+    reg st3_voxel_valid;
+    reg signed [COORD_WIDTH-1:0] st3_voxel_x;
+    reg signed [COORD_WIDTH-1:0] st3_voxel_y;
+
+    // 核心数据寄存器：存放加法树结果
+    reg signed [ACC_WIDTH-1:0] st3_mac_tree[0:HALF_OUT_DIM-1];
+
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            st3_valid       <= 1'b0;
+            st3_phase       <= 1'b0;
+            st3_last        <= 1'b0;
+            st3_voxel_valid <= 1'b0;
+            st3_voxel_x     <= {COORD_WIDTH{1'b0}};
+            st3_voxel_y     <= {COORD_WIDTH{1'b0}};
+            for (j = 0; j < HALF_OUT_DIM; j = j + 1) begin
+                st3_mac_tree[j] <= 0;
+            end
+        end else begin
+            // 1. 无脑传递控制信号 (把 st2 的状态向后推一拍)
+            st3_valid       <= st2_valid;
+            st3_phase       <= st2_phase;
+            st3_last        <= st2_last;
+            st3_voxel_valid <= st2_voxel_valid;
+            st3_voxel_x     <= st2_voxel_x;
+            st3_voxel_y     <= st2_voxel_y;
+
+            // 2. 数据计算：当有有效数据时，计算 4 级加法树并打入寄存器
+            if (st2_valid) begin
+                for (j = 0; j < HALF_OUT_DIM; j = j + 1) begin
+                    st3_mac_tree[j] <= (
+                    // 左半树
+                    (
+                            (st2_bias[j]      + st2_mult[j][0]) + 
+                            (st2_mult[j][1]   + st2_mult[j][2])
+                        ) + (
+                            (st2_mult[j][3]   + st2_mult[j][4]) + 
+                             st2_mult[j][5]
+                        )
+                    ) + (
+                    // 右半树
+                    ((st2_mult[j][6] + st2_mult[j][7]) + (st2_mult[j][8] + st2_mult[j][9])) + (st2_mult[j][10]));
+                end
+            end
+        end
+    end
+    // =======================================================
+    // 级联流水线 Stage 3: 去量化与 ReLU (纯组合逻辑)
+    // 数据源变为刚刚打过拍的 st3_mac_tree
+    // =======================================================
+    reg [PT_WIDTH-1:0] relu_comb[0:HALF_OUT_DIM-1];
+    reg signed [63:0] dequant_temp[0:HALF_OUT_DIM-1];
+
+    always @(*) begin
+        for (j = 0; j < HALF_OUT_DIM; j = j + 1) begin
+            // 反量化乘法 (使用打过拍的数据 st3_mac_tree)
+            dequant_temp[j] = st3_mac_tree[j] * 994;
+
+            // ReLU
+            if (st3_mac_tree[j] < 0) relu_comb[j] = 0;
+            else relu_comb[j] = dequant_temp[j][PT_WIDTH+20-1 : 20];
+        end
+    end
+
+    // =======================================================
+    // 级联流水线 Stage 4: Max Pool 与 数据输出
+    // 这里的控制条件全部改为监听 st3 的信号
+    // =======================================================
+    reg signed [PT_WIDTH-1:0] max_pool_regs[0:OUT_PT_DIM-1];
+    integer oc;
+
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            m_axis_out_valid <= 1'b0;
+            m_axis_out_voxel_valid <= 1'b0;
+            m_axis_out_voxel_x <= {COORD_WIDTH{1'b0}};
+            m_axis_out_voxel_y <= {COORD_WIDTH{1'b0}};
+            m_axis_out_data <= 0;
+            for (oc = 0; oc < OUT_PT_DIM; oc = oc + 1) begin
+                max_pool_regs[oc] <= 0;
+            end
+        end else begin
+            // 默认拉低单周期脉冲
+            m_axis_out_valid <= 1'b0;
+            m_axis_out_voxel_valid <= 1'b0;
+
+            // 注意：这里改为由 st3_valid 触发
+            if (st3_valid) begin
+                if (st3_phase == 0) begin
+                    // 【对应前半区计算完毕】：更新前半区 (0~23) 的 Max Pool
                     for (oc = 0; oc < HALF_OUT_DIM; oc = oc + 1) begin
                         if (relu_comb[oc] > max_pool_regs[oc]) begin
                             max_pool_regs[oc] <= relu_comb[oc];
                         end
                     end
-
-                    phase <= 1'b1;  // 切换到下半区计算
-                end
-            end else begin
-                // 【周期 2】使用锁存数据，执行后半区 (24~47) 运算
-
-                // 更新后半区 (24~47) 的 Max Pool
-                for (oc = 0; oc < HALF_OUT_DIM; oc = oc + 1) begin
-                    if (relu_comb[oc] > max_pool_regs[oc+HALF_OUT_DIM]) begin
-                        max_pool_regs[oc+HALF_OUT_DIM] <= relu_comb[oc];
-                    end
-                end
-
-                // 如果是当前 Voxel 的最后一个点，结算并输出
-                if (latched_last) begin
-                    m_axis_out_valid       <= 1'b1;
-                    m_axis_out_voxel_valid <= latched_voxel_valid;
-                    m_axis_out_voxel_x     <= latched_voxel_x;
-                    m_axis_out_voxel_y     <= latched_voxel_y;
-
+                end else begin
+                    // 【对应后半区计算完毕】：更新后半区 (24~47) 的 Max Pool
                     for (oc = 0; oc < HALF_OUT_DIM; oc = oc + 1) begin
-                        // 1. 组装前半区数据（由于上一拍已经写入 max_pool，直接取值）
-                        m_axis_out_data[oc*PT_WIDTH+:PT_WIDTH] <= max_pool_regs[oc];
+                        if (relu_comb[oc] > max_pool_regs[oc+HALF_OUT_DIM]) begin
+                            max_pool_regs[oc+HALF_OUT_DIM] <= relu_comb[oc];
+                        end
+                    end
 
-                        // 2. 组装后半区数据（当前拍正在更新，使用组合逻辑的三目运算符保证数据最新）
-                        m_axis_out_data[(oc + HALF_OUT_DIM)*PT_WIDTH +: PT_WIDTH] <= 
-                            (relu_comb[oc] > max_pool_regs[oc + HALF_OUT_DIM]) ? relu_comb[oc] : max_pool_regs[oc + HALF_OUT_DIM];
+                    // 巧妙对齐：如果这是当前 Voxel 的最后一个点
+                    // 注意：这里改为看 st3_last
+                    if (st3_last) begin
+                        m_axis_out_valid       <= 1'b1;
+                        m_axis_out_voxel_valid <= st3_voxel_valid;
+                        m_axis_out_voxel_x     <= st3_voxel_x;
+                        m_axis_out_voxel_y     <= st3_voxel_y;
 
-                        // 3. 输出后立刻清空寄存器，为下一个 Voxel 做准备
-                        max_pool_regs[oc] <= 0;
-                        max_pool_regs[oc+HALF_OUT_DIM] <= 0;
+                        for (oc = 0; oc < HALF_OUT_DIM; oc = oc + 1) begin
+                            // 1. 前半区数据直接从 max_pool_regs 取出
+                            m_axis_out_data[oc*PT_WIDTH+:PT_WIDTH] <= max_pool_regs[oc];
+
+                            // 2. 后半区数据：用三目运算符挑出最大值抢时间输出
+                            m_axis_out_data[(oc + HALF_OUT_DIM)*PT_WIDTH +: PT_WIDTH] <= 
+                                (relu_comb[oc] > max_pool_regs[oc + HALF_OUT_DIM]) ? relu_comb[oc] : max_pool_regs[oc + HALF_OUT_DIM];
+
+                            // 3. 结算完毕，清空该 Voxel 的所有缓存池
+                            max_pool_regs[oc] <= 0;
+                            max_pool_regs[oc+HALF_OUT_DIM] <= 0;
+                        end
                     end
                 end
-
-                phase <= 1'b0;  // 一点处理完毕，回到空闲/接收状态
             end
         end
     end
+
+
+    // =========================================================================
+    // 帧尾排空信号传递 (Flush Propagation)
+    // =========================================================================
+    reg  pfn_flushing_req;
+    reg  m_axis_out_flush_done_reg;
+
+    // PFN 完全排空的条件：
+    // 1. phase == 0 : 没有正在等待处理后半通道 24~47 的挂起点
+    // 2. !st2_valid && !st3_valid : 内部加法树寄存器中无数据
+    // 3. !m_axis_out_valid : 最终输出结果已被弹出
+    wire pfn_empty = (phase == 1'b0) && !st2_valid && !st3_valid && !m_axis_out_valid;
+
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            pfn_flushing_req          <= 1'b0;
+            m_axis_out_flush_done_reg <= 1'b0;
+        end else begin
+            // 捕获 PFE 传来的帧结束标志
+            if (s_axis_pfe_flush_done) begin
+                pfn_flushing_req <= 1'b1;
+            end
+
+            // 等待加法树运算结束，结果输出后，再把 flush_done 继续往下传
+            if (pfn_flushing_req && pfn_empty && !m_axis_out_flush_done_reg) begin
+                m_axis_out_flush_done_reg <= 1'b1;
+                pfn_flushing_req          <= 1'b0;
+            end else begin
+                m_axis_out_flush_done_reg <= 1'b0;
+            end
+        end
+    end
+
+    assign m_axis_out_flush_done = m_axis_out_flush_done_reg;
+
 
     // =======================================================
     // 仿真测试探针区 (不可综合)
@@ -260,7 +415,7 @@ module pfn_layer #(
             end
         end
     end
-    
+
     // Simulation log: output
     always @(posedge clk) begin
         if (rst_n && m_axis_out_valid) begin

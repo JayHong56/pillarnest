@@ -24,8 +24,9 @@ module pfe #(
     output reg                                                     m_axis_pfe_last,
     output reg                                                     m_axis_pfe_voxel_valid,
     output reg signed [                           COORD_WIDTH-1:0] m_axis_pfe_voxel_x,
-    output reg signed [                           COORD_WIDTH-1:0] m_axis_pfe_voxel_y
-
+    output reg signed [                           COORD_WIDTH-1:0] m_axis_pfe_voxel_y,
+    output wire                                                    m_axis_pfe_flush_done,   // <--- 新增
+    input  wire                                                    flush_done
 );
     assign bram_pfe_clk = clk;
     // 注意：Verilog 切片最好用固定数值，或者确保 parameter 计算正确
@@ -716,6 +717,42 @@ module pfe #(
 
         end
     end
+
+    // =========================================================================
+    // 帧尾排空信号传递 (Flush Propagation)
+    // =========================================================================
+    reg  pfe_flushing_req;
+    reg  m_axis_pfe_flush_done_reg;
+
+    // PFE 完全排空的条件：
+    // 1. inflight_cnt == 0 : Stage 1 和 Stage 2 没有正在读取/累加的数据
+    // 2. !st3_valid && !st4_valid : 中间 DSP 流水线段没有数据
+    // 3. fifo_empty : 4-entry Voxel FIFO 已全空
+    // 4. !m_axis_pfe_valid : 串行化输出总线已闲置
+    wire pfe_empty = (inflight_cnt == 3'd0) && !st3_valid && !st4_valid && fifo_empty && !m_axis_pfe_valid;
+
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            pfe_flushing_req          <= 1'b0;
+            m_axis_pfe_flush_done_reg <= 1'b0;
+        end else begin
+            // 捕获上一级的帧结束标志
+            if (flush_done) begin
+                pfe_flushing_req <= 1'b1;
+            end
+
+            // 当收到清空请求，且整个 PFE 完美排空后，向下一级发出 1-cycle pulse
+            if (pfe_flushing_req && pfe_empty && !m_axis_pfe_flush_done_reg) begin
+                m_axis_pfe_flush_done_reg <= 1'b1;
+                pfe_flushing_req          <= 1'b0;
+            end else begin
+                m_axis_pfe_flush_done_reg <= 1'b0;
+            end
+        end
+    end
+
+    assign m_axis_pfe_flush_done = m_axis_pfe_flush_done_reg;
+
 
 
 `ifndef SYNTHESIS

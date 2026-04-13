@@ -98,9 +98,6 @@ module hash_expire_manager #(
             dq_count   <= {($clog2(DQ_DEPTH + 1)) {1'b0}};
             cand_valid <= 1'b0;
             cand_addr  <= {ADDR_WIDTH{1'b0}};
-            for (k = 0; k < DQ_DEPTH; k = k + 1) begin
-                dq_mem[k] <= {ADDR_WIDTH{1'b0}};
-            end
         end else if (frame_end) begin
             // 收到清空指令，直接复位 DQ，因为接下来的 Flush FSM 会兜底扫描全表
             dq_wr_ptr  <= 0;
@@ -125,33 +122,6 @@ module hash_expire_manager #(
             cand_addr  <= {ADDR_WIDTH{1'b0}};
         end
 
-    end
-
-    // =========================================================================
-    // 新增：帧末清空状态机 (EOF Flush FSM)
-    // =========================================================================
-    reg flushing;
-    reg [ADDR_WIDTH:0] flush_cnt;  // 多一位用于判断结束 (0~256)
-    assign flush_done = flushing && (flush_cnt == TABLE_SIZE) && !hash_stall;
-    wire flush_run = flushing && (flush_cnt < TABLE_SIZE) && !hash_stall;  // 控制流水线步进
-    always @(posedge clk or negedge rst_n) begin
-        if (!rst_n) begin
-            flushing  <= 1'b0;
-            flush_cnt <= {(ADDR_WIDTH + 1) {1'b0}};
-        end else begin
-            if (frame_end && !flushing) begin
-                flushing  <= 1'b1;  // 收到帧末信号，启动清空
-                flush_cnt <= 0;
-            end else if (flushing) begin
-                if (!hash_stall) begin
-                    if (flush_cnt == TABLE_SIZE) begin
-                        flushing <= 1'b0;  // 扫完 256 个地址，清空结束
-                    end else begin
-                        flush_cnt <= flush_cnt + 1'b1;
-                    end
-                end
-            end
-        end
     end
 
     reg write_commit_delay;
@@ -180,6 +150,12 @@ module hash_expire_manager #(
     wire [TIMER_WIDTH-1:0] r_ts;
     assign {r_status, r_key_x, r_key_y, r_pn, r_ts} = a_rdata_shadow;
 
+    
+    reg flushing;
+    reg [ADDR_WIDTH:0] flush_cnt;  // 多一位用于判断结束 (0~256)
+    // 控制流水线步进，只有在未扫完且无反压时才工作
+    wire flush_run = flushing && (flush_cnt < TABLE_SIZE) && !hash_stall;
+
     // 动态选择：正常模式吃 DQ 吐出的 cand_addr，Flush 模式吃扫描计数器 flush_cnt
     wire eff_cand_valid = flush_run ? 1'b1 : cand_valid;
     wire [ADDR_WIDTH-1:0] eff_cand_addr = flush_run ? flush_cnt[ADDR_WIDTH-1:0] : cand_addr;
@@ -190,7 +166,6 @@ module hash_expire_manager #(
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             a_addr_shadow   <= {BUCKET_AW{1'b0}};
-            b_wdata         <= {ENTRY_WIDTH{1'b0}};
             s0_valid        <= 1'b0;
             s0_addr         <= {ADDR_WIDTH{1'b0}};
             s0_time         <= {TIMER_WIDTH{1'b0}};
@@ -393,6 +368,44 @@ module hash_expire_manager #(
         end
     end
 
+
+    // =========================================================================
+    // 修改：帧末清空状态机 (EOF Flush FSM) - 精确控制 flush_done
+    // =========================================================================
+
+    // 检查流水线和缓存是否全部排空：
+    // 1. 扫描结束 (flush_cnt == TABLE_SIZE)
+    // 2. S0 和 S1 级流水线中没有因 Flush 而强制过期的任务
+    // 3. 中间缓存 fifo 已空 (task_empty)
+    // 4. BRAM 搬运状态机处于空闲态 (copy_st == ST_IDLE)
+    // 5. 最终过期输出 FIFO 中不仅 level 为 0，且 valid 也拉低了（确保完全被下游吃掉）
+    wire all_drained = (flush_cnt == TABLE_SIZE) && 
+                       (!s0_force_expire && !s1_force_expire) && 
+                       task_empty && 
+                       (copy_st == ST_IDLE) && 
+                       (fifo_out_level == 0 && !fifo_out_valid);
+    // 只有在所有阶段都彻底排空时，才发出 flush_done（只持续 1 个 cycle）
+    assign flush_done = flushing && all_drained;
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            flushing  <= 1'b0;
+            flush_cnt <= {(ADDR_WIDTH + 1) {1'b0}};
+        end else begin
+            if (frame_end && !flushing) begin
+                flushing  <= 1'b1;  // 收到帧末信号，启动清空
+                flush_cnt <= 0;
+            end else if (flushing) begin
+                if (flush_cnt < TABLE_SIZE) begin
+                    if (!hash_stall) begin
+                        flush_cnt <= flush_cnt + 1'b1;
+                    end
+                end else if (all_drained) begin
+                    // 扫完地址后停留在 flushing 状态，直到数据通路完全排空
+                    flushing <= 1'b0;
+                end
+            end
+        end
+    end
 
 
 endmodule
