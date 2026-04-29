@@ -163,7 +163,7 @@ if __name__ == "__main__":
     print("="*60)
 
     # 1. 实例化仿真模型 (填入你的 weight.mem 和 bias.mem 路径)
-    sim = PfnLayerBitTrue(weight_file=r"E:/mmdetection3d/my_output_parameters/weight.mem", bias_file=r"E:/mmdetection3d/my_output_parameters/bias.mem")
+    sim = PfnLayerBitTrue(weight_file=r"E:\mmdetection3d\my_output_parameters\pfn_layer_fused_int\mem\pfn_weight.mem", bias_file=r"E:/mmdetection3d/my_output_parameters/bias.mem")
 
     # # [演示用] 灌入一点测试权重，不然都是 0 没法看
     # for c in range(48):

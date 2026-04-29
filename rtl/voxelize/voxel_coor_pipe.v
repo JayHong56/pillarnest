@@ -1,53 +1,58 @@
 module voxel_coor_pipe #(
-    parameter integer        BRAM_DATA_WIDTH          = 640,       // 4 * 64
-    parameter integer        BRAM_ADDR_WIDTH          = 9,         // 128pillar * 5brams
-    parameter integer        AXIS_DATA_WIDTH          = 128,
-    parameter integer        AXIS_ADDR_WIDTH          = 16,
-    parameter integer        HASH_ADDR_WIDTH          = 8,         // log2(HASH_TABLE_SIZE)
-    parameter         [15:0] THRESHOLD_CLOSE          = 16'h0100,  // 1.00m
-    parameter         [15:0] THRESHOLD_BOUDARY        = 16'h3600,  // 54.00m
-    parameter         [15:0] THRESHOLD_BOUDARY_Z_LOW  = 16'h5000,  // -(-5)m
-    parameter         [15:0] THRESHOLD_BOUDARY_Z_HIGH = 16'h3000,  // +3m
-    parameter integer        PRE_LAT                  = 0,         // 预处理固定延迟（拍数占位）
-    parameter         [15:0] LIFE_CYCLE               = 16'd100
+    parameter integer        BRAM_DATA_WIDTH          = 640,                    // 64* 8
+    parameter integer        BRAM_ADDR_WIDTH          = 9,                      // 256 pillar * 4brams
+    parameter integer        BRAM_ADDR_WIDTH_PFE      = 6,                      // 32, PFE_CACHE 深度
+    parameter integer        PREFILTER_LANES          = 1,
+    parameter integer        DRAM_DATA_WIDTH          = 128 * PREFILTER_LANES,
+    parameter integer        DRAM_ADDR_WIDTH          = 18,
+    parameter integer        HASH_ADDR_WIDTH          = 8,                      // log2(HASH_TABLE_SIZE)
+    parameter         [15:0] THRESHOLD_CLOSE          = 16'h0100,               // 1.00m
+    parameter         [15:0] THRESHOLD_BOUDARY        = 16'h3600,               // 54.00m
+    parameter         [15:0] THRESHOLD_BOUDARY_Z_LOW  = 16'h5000,               // -(-5)m
+    parameter         [15:0] THRESHOLD_BOUDARY_Z_HIGH = 16'h3000,               // +3m
+    parameter integer        PRE_LAT                  = 0,                      // 预处理固定延迟（拍数占位）
+    parameter         [15:0] LIFE_CYCLE               = 16'd100,
+    parameter integer        VN_WIDTH                 = 5,                      // 点编号宽度（hash 表输出 1..20）
+    parameter         [23:0] MAX_VOXEL_NUM            = 24'd20                  // 每体素最多 20 点
+
 ) (
     input wire clk,
     input wire rst_n,
 
-    input  wire                         frame_end,              // 外部传入：当前帧点云结束脉冲 (1-cycle pulse)
-    output wire                         flush_done,             // 输出：哈希表剩余有效点已全部输出完毕
+    input wire frame_end,  // 外部传入：当前帧点云结束脉冲 (1-cycle pulse)
+    output wire flush_done,  // 输出：哈希表剩余有效点已全部输出完毕
+    output wire hash_stall,
     // AXI-Stream in (from DRAM FIFO)
-    input  wire [  AXIS_DATA_WIDTH-1:0] s_axis_dram_data,
-    input  wire [AXIS_DATA_WIDTH/8-1:0] s_axis_dram_keep,
-    input  wire                         s_axis_dram_last,
-    input  wire                         s_axis_dram_valid,
-    output wire                         s_axis_dram_ready,
+    input wire [DRAM_DATA_WIDTH-1:0] s_axis_dram_data,
+    input wire [DRAM_DATA_WIDTH/8-1:0] s_axis_dram_keep,
+    input wire s_axis_dram_last,
+    input wire s_axis_dram_valid,
+    output wire s_axis_dram_ready,
     // BRAM Native Interface
-    output wire                         bram_voxelpoint_clk,
-    output wire                         bram_voxelpoint_rst,
-    output reg                          bram_voxelpoint_wr,
-    output reg  [BRAM_DATA_WIDTH/8-1:0] bram_voxelpoint_bwen,   // 32-bit Byte Enable
-    output reg  [  BRAM_ADDR_WIDTH-1:0] bram_voxelpoint_addr,   // 10-bit Address
-    output reg  [  BRAM_DATA_WIDTH-1:0] bram_voxelpoint_wrdata, // 256-bit Data
-
-    output wire                       bram_expire_clk_a,
+    output wire bram_voxelpoint_clk,
+    output wire bram_voxelpoint_rst,
+    output reg bram_voxelpoint_wr,
+    output reg [BRAM_DATA_WIDTH/8-1:0] bram_voxelpoint_bwen,  // 32-bit Byte Enable
+    output reg [BRAM_ADDR_WIDTH-1:0] bram_voxelpoint_addr,  // 10-bit Address
+    output reg [BRAM_DATA_WIDTH-1:0] bram_voxelpoint_wrdata,  // 256-bit Data
+    // BRAM_VOXELPOINT_A
+    output wire bram_expire_clk_a,
     // output wire                         bram_expire_rst_a,
     // output wire                         bram_expire_wr_a,
     // output wire [BRAM_DATA_WIDTH/8-1:0] bram_expire_bwen_a,   // 32-bit Byte Enable
     output wire [BRAM_ADDR_WIDTH-1:0] bram_expire_addr_a,  // 10-bit Address
-    input  wire [BRAM_DATA_WIDTH-1:0] bram_expire_rdata_a, // 256-bit Data
-
-    output wire                         bram_expire_clk_b,
-    output wire                         bram_expire_rst_b,
-    output wire                         bram_expire_wr_b,
-    output wire [BRAM_DATA_WIDTH/8-1:0] bram_expire_bwen_b,   // 32-bit Byte Enable
-    output wire [  BRAM_ADDR_WIDTH-1:0] bram_expire_addr_b,   // 10-bit Address
-    output wire [  BRAM_DATA_WIDTH-1:0] bram_expire_wrdata_b, // 256-bit Data
-
+    input wire [BRAM_DATA_WIDTH-1:0] bram_expire_rdata_a,  // 256-bit Data
+    // BRAM_VOXELPOINT_B
+    output wire bram_expire_clk_b,
+    output wire bram_expire_rst_b,
+    output wire bram_expire_wr_b,
+    output wire [BRAM_DATA_WIDTH/8-1:0] bram_expire_bwen_b,  // 32-bit Byte Enable
+    output wire [BRAM_ADDR_WIDTH_PFE-1:0] bram_expire_addr_b,  // 10-bit Address
+    output wire [BRAM_DATA_WIDTH-1:0] bram_expire_wrdata_b,  // 256-bit Data
     // AXI-Stream out (expire voxel coordinates)
-    output wire                            m_axis_expire_tvalid,
-    input  wire                            m_axis_expire_tready,
-    output wire [22+BRAM_ADDR_WIDTH+5-1:0] m_axis_expire_tdata
+    output wire m_axis_expire_tvalid,
+    input wire m_axis_expire_tready,
+    output wire [22+BRAM_ADDR_WIDTH_PFE+VN_WIDTH-1:0] m_axis_expire_tdata
 );
 
     localparam integer PT_WIDTH_I_XY = 8;
@@ -59,98 +64,235 @@ module voxel_coor_pipe #(
 
     localparam integer PT_WIDTH = 16;  // 16
     localparam integer PT_WIDTH_FLOAT32 = 32;
-    localparam integer VOXEL_WIDTH = 11;
+    localparam integer VOXEL_WIDTH = 11;  // NOTE 根据伪图尺寸设定
 
-    localparam [23:0] MAX_VOXEL_NUM = 24'd20;  // 每体素最多 20 点
-    localparam integer VN_WIDTH = 5;  // 点编号宽度（hash 表输出 1..）
-    localparam integer POINTS_PER_ROW = BRAM_DATA_WIDTH / (4 * PT_WIDTH);  // 640/64 = 10
-    localparam integer EXPEND_VOXEL_ROW = (MAX_VOXEL_NUM + POINTS_PER_ROW - 1) / POINTS_PER_ROW;  // ceil(20/10)=2
+    localparam integer POINTS_PER_ROW = BRAM_DATA_WIDTH / (4 * PT_WIDTH);  // 512/64 = 8
+    localparam integer EXPEND_VOXEL_ROW = (MAX_VOXEL_NUM + POINTS_PER_ROW - 1) / POINTS_PER_ROW;  // ceil(20/8)=3
 
     // BRAM clk/rst
     assign bram_voxelpoint_clk = clk;
     assign bram_voxelpoint_rst = ~rst_n;
 
-    wire                          hash_req_ready;
-    wire                          hash_req_valid;
-    wire                          hash_fire = hash_req_valid && hash_req_ready;
+    wire hash_req_ready;
+    wire hash_req_valid;
+    wire hash_fire = hash_req_valid && hash_req_ready;
 
-    reg                           keep_point;
-    reg  [PT_WIDTH_FLOAT32*4-1:0] point_raw_r;
-    reg                           point_raw_vld;
-    wire                          s_fire = s_axis_dram_valid && s_axis_dram_ready;
-    // point_raw_val, keep_point, hash_fire
-    // 1/0 : 当前点不在有效范围内
-    // 0/? : 当前点无效，且没有新点进来，等待s_fire握手
-    // 1/1/0 : 当前点有效，但 hash 表未准备好
-    wire                          upstream_can_accept;
-    assign s_axis_dram_ready = upstream_can_accept;
+    // ============================================================
+    // 多路 prefilter + 单路 voxel/hash 前端
+    // ============================================================
+    localparam integer RAW_PT_WIDTH = 4 * PT_WIDTH_FLOAT32;  // 128 bit
 
-    always @(posedge clk or negedge rst_n) begin
-        if (!rst_n) begin
-            point_raw_r   <= {PT_WIDTH_FLOAT32 * 4{1'b0}};
-            point_raw_vld <= 1'b0;
-        end else begin
-            if (s_fire) begin
-                point_raw_r   <= s_axis_dram_data;
-                point_raw_vld <= 1'b1;
-            end else if (upstream_can_accept) begin
-                // 没有新数据进来，但当前数据已经被处理（丢弃或发往下游），清空有效位
-                point_raw_vld <= 1'b0;
+    // 候选 FIFO 保存：
+    // {x_fix16, y_fix16, z_fix16, intensity_float32}
+    // intensity 先不转 fixed，后面单路转，节省资源
+    localparam integer CAND_WIDTH = 3 * PT_WIDTH + PT_WIDTH_FLOAT32;
+
+    // 建议用 64 或 128，必须是 2 的幂
+    localparam integer CAND_FIFO_DEPTH = 32;
+    localparam integer CAND_FIFO_PTR_W = $clog2(CAND_FIFO_DEPTH);
+    localparam integer CAND_FIFO_CNT_W = $clog2(CAND_FIFO_DEPTH + 1);
+
+`ifndef SYNTHESIS
+    initial begin
+        if (DRAM_DATA_WIDTH != RAW_PT_WIDTH * PREFILTER_LANES) begin
+            $display("[ERROR][voxel_coor_pipe] DRAM_DATA_WIDTH must equal 128 * PREFILTER_LANES.");
+            $stop;
+        end
+
+        if ((CAND_FIFO_DEPTH & (CAND_FIFO_DEPTH - 1)) != 0) begin
+            $display("[ERROR][voxel_coor_pipe] CAND_FIFO_DEPTH must be power of 2.");
+            $stop;
+        end
+    end
+`endif
+
+    // ------------------------------------------------------------
+    // AXIS 输入握手
+    // ------------------------------------------------------------
+    wire s_fire;
+    assign s_fire = s_axis_dram_valid && s_axis_dram_ready;
+
+    // ------------------------------------------------------------
+    // 每 lane 拆 raw point
+    // 默认 lane0 在 s_axis_dram_data[127:0]
+    // lane1 在 [255:128]
+    // lane2 在 [383:256]
+    // ------------------------------------------------------------
+    wire [RAW_PT_WIDTH-1:0] lane_raw[0:PREFILTER_LANES-1];
+
+    wire [PT_WIDTH_FLOAT32-1:0] lane_x_float32[0:PREFILTER_LANES-1];
+    wire [PT_WIDTH_FLOAT32-1:0] lane_y_float32[0:PREFILTER_LANES-1];
+    wire [PT_WIDTH_FLOAT32-1:0] lane_z_float32[0:PREFILTER_LANES-1];
+    wire [PT_WIDTH_FLOAT32-1:0] lane_i_float32[0:PREFILTER_LANES-1];
+
+    wire signed [PT_WIDTH-1:0] lane_x_fix16[0:PREFILTER_LANES-1];
+    wire signed [PT_WIDTH-1:0] lane_y_fix16[0:PREFILTER_LANES-1];
+    wire signed [PT_WIDTH-1:0] lane_z_fix16[0:PREFILTER_LANES-1];
+
+    wire [15:0] lane_abs_x[0:PREFILTER_LANES-1];
+    wire [15:0] lane_abs_y[0:PREFILTER_LANES-1];
+    wire [15:0] lane_abs_z[0:PREFILTER_LANES-1];
+
+    wire lane_keep[0:PREFILTER_LANES-1];
+    wire lane_present[0:PREFILTER_LANES-1];
+
+    wire [CAND_WIDTH-1:0] lane_cand_data[0:PREFILTER_LANES-1];
+
+    genvar gi;
+    generate
+        for (gi = 0; gi < PREFILTER_LANES; gi = gi + 1) begin : GEN_PREFILTER_LANE
+            assign lane_raw[gi] = s_axis_dram_data[gi*RAW_PT_WIDTH+:RAW_PT_WIDTH];
+
+            assign lane_x_float32[gi] = lane_raw[gi][127:96];
+            assign lane_y_float32[gi] = lane_raw[gi][95:64];
+            assign lane_z_float32[gi] = lane_raw[gi][63:32];
+            assign lane_i_float32[gi] = lane_raw[gi][31:0];
+
+            // 当前 lane 是否有完整 16-byte point
+            assign lane_present[gi] = &s_axis_dram_keep[gi*(RAW_PT_WIDTH/8)+:(RAW_PT_WIDTH/8)];
+
+            float_to_fixed #(
+                .FIXED_WIDTH     (PT_WIDTH_F_XY + PT_WIDTH_I_XY),
+                .FIXED_FRACTIONAL(PT_WIDTH_F_XY)
+            ) u_float2fxp_x (
+                .float_in        (lane_x_float32[gi]),
+                .true_fixed_value(lane_x_fix16[gi]),
+                .fixed_sign      ()
+            );
+
+            float_to_fixed #(
+                .FIXED_WIDTH     (PT_WIDTH_F_XY + PT_WIDTH_I_XY),
+                .FIXED_FRACTIONAL(PT_WIDTH_F_XY)
+            ) u_float2fxp_y (
+                .float_in        (lane_y_float32[gi]),
+                .true_fixed_value(lane_y_fix16[gi]),
+                .fixed_sign      ()
+            );
+
+            float_to_fixed #(
+                .FIXED_WIDTH     (PT_WIDTH_F_Z + PT_WIDTH_I_Z),
+                .FIXED_FRACTIONAL(PT_WIDTH_F_Z)
+            ) u_float2fxp_z (
+                .float_in        (lane_z_float32[gi]),
+                .true_fixed_value(lane_z_fix16[gi]),
+                .fixed_sign      ()
+            );
+
+            assign lane_abs_x[gi] = lane_x_fix16[gi][15] ? (~lane_x_fix16[gi] + 1'b1) : lane_x_fix16[gi];
+            assign lane_abs_y[gi] = lane_y_fix16[gi][15] ? (~lane_y_fix16[gi] + 1'b1) : lane_y_fix16[gi];
+            assign lane_abs_z[gi] = lane_z_fix16[gi][15] ? (~lane_z_fix16[gi] + 1'b1) : lane_z_fix16[gi];
+
+            // keep_point 判断：这里只做 x/y/z 边界，不做 voxel 坐标计算
+            assign lane_keep[gi] =
+                        lane_present[gi] &&
+                        (lane_raw[gi] != {RAW_PT_WIDTH{1'b0}}) &&
+                        !(lane_abs_x[gi] > THRESHOLD_BOUDARY) &&
+                        !(lane_abs_y[gi] > THRESHOLD_BOUDARY) &&
+                        !(lane_z_fix16[gi][15] ? 
+                            (lane_abs_z[gi] > THRESHOLD_BOUDARY_Z_LOW) :
+                            (lane_abs_z[gi] > THRESHOLD_BOUDARY_Z_HIGH));
+
+            assign lane_cand_data[gi] = {lane_x_fix16[gi], lane_y_fix16[gi], lane_z_fix16[gi], lane_i_float32[gi]};
+        end
+    endgenerate
+
+
+    // ============================================================
+    // Candidate FIFO：每拍最多写入 PREFILTER_LANES 个有效点
+    // 每拍最多读出 1 个有效点给单路 voxel 计算
+    // ============================================================
+    (* ram_style = "distributed" *)
+    reg [CAND_WIDTH-1:0] cand_fifo_mem[0:CAND_FIFO_DEPTH-1];
+
+    reg [CAND_FIFO_PTR_W-1:0] cand_fifo_wr_ptr;
+    reg [CAND_FIFO_PTR_W-1:0] cand_fifo_rd_ptr;
+    reg [CAND_FIFO_CNT_W-1:0] cand_fifo_level;
+
+    wire cand_fifo_empty;
+    wire cand_fifo_full;
+
+    assign cand_fifo_empty = (cand_fifo_level == {CAND_FIFO_CNT_W{1'b0}});
+    assign cand_fifo_full  = (cand_fifo_level == CAND_FIFO_DEPTH[CAND_FIFO_CNT_W-1:0]);
+
+    wire [CAND_WIDTH-1:0] cand_fifo_dout;
+    assign cand_fifo_dout = cand_fifo_mem[cand_fifo_rd_ptr];
+
+    function [CAND_FIFO_PTR_W-1:0] cand_ptr_add;
+        input [CAND_FIFO_PTR_W-1:0] ptr;
+        input [CAND_FIFO_CNT_W-1:0] inc;
+        reg [CAND_FIFO_CNT_W:0] tmp;
+        begin
+            tmp = ptr + inc;
+            cand_ptr_add = tmp[CAND_FIFO_PTR_W-1:0];
+        end
+    endfunction
+
+    // 当前 beat 中每个 lane 是否 push
+    wire lane_push[0:PREFILTER_LANES-1];
+
+    genvar gp;
+    generate
+        for (gp = 0; gp < PREFILTER_LANES; gp = gp + 1) begin : GEN_LANE_PUSH
+            assign lane_push[gp] = s_fire && lane_keep[gp];
+        end
+    endgenerate
+
+    // 计算每个 lane 的写入偏移，以及本 beat 总 push 数
+    reg [CAND_FIFO_CNT_W-1:0] lane_prefix[0:PREFILTER_LANES-1];
+    reg [CAND_FIFO_CNT_W-1:0] cand_push_count;
+
+    integer pi;
+    always @(*) begin
+        cand_push_count = {CAND_FIFO_CNT_W{1'b0}};
+
+        for (pi = 0; pi < PREFILTER_LANES; pi = pi + 1) begin
+            lane_prefix[pi] = cand_push_count;
+
+            if (lane_push[pi]) begin
+                cand_push_count = cand_push_count + 1'b1;
             end
         end
     end
 
-    wire        [         PT_WIDTH_FLOAT32*4-1:0] point_raw = point_raw_r;
-    // unpack
-    wire        [           PT_WIDTH_FLOAT32-1:0] pt_x_float32 = point_raw[127:96];
-    wire        [           PT_WIDTH_FLOAT32-1:0] pt_y_float32 = point_raw[95:64];
-    wire        [           PT_WIDTH_FLOAT32-1:0] pt_z_float32 = point_raw[63:32];
-    wire        [           PT_WIDTH_FLOAT32-1:0] pt_intensity_float32 = point_raw[31:0];
 
-    // float to fixed
-    wire signed [PT_WIDTH_I_XY+PT_WIDTH_F_XY-1:0] pt_x_fix16;
-    wire signed [PT_WIDTH_I_XY+PT_WIDTH_F_XY-1:0] pt_y_fix16;
-    wire signed [  PT_WIDTH_I_Z+PT_WIDTH_F_Z-1:0] pt_z_fix16;
-    wire signed [PT_WIDTH_I_IS+PT_WIDTH_F_IS-1:0] pt_intensity_fix16;
-    float_to_fixed #(
-        .FIXED_WIDTH     (PT_WIDTH_F_XY + PT_WIDTH_I_XY),
-        .FIXED_FRACTIONAL(PT_WIDTH_F_XY)
-    ) float2fxp_x (
-        .float_in        (pt_x_float32),
-        .true_fixed_value(pt_x_fix16),
-        .fixed_sign      ()
-    );
-    float_to_fixed #(
-        .FIXED_WIDTH     (PT_WIDTH_F_XY + PT_WIDTH_I_XY),
-        .FIXED_FRACTIONAL(PT_WIDTH_F_XY)
-    ) float2fxp_y (
-        .float_in        (pt_y_float32),
-        .true_fixed_value(pt_y_fix16),
-        .fixed_sign      ()
-    );
-    float_to_fixed #(
-        .FIXED_WIDTH     (PT_WIDTH_F_Z + PT_WIDTH_I_Z),
-        .FIXED_FRACTIONAL(PT_WIDTH_F_Z)
-    ) float2fxp_z (
-        .float_in        (pt_z_float32),
-        .true_fixed_value(pt_z_fix16),
-        .fixed_sign      ()
-    );
+    // ============================================================
+    // 单路 voxel 计算输入：从 candidate FIFO 读出的有效点
+    // ============================================================
+    wire signed [PT_WIDTH-1:0] cand_x_fix16;
+    wire signed [PT_WIDTH-1:0] cand_y_fix16;
+    wire signed [PT_WIDTH-1:0] cand_z_fix16;
+    wire [PT_WIDTH_FLOAT32-1:0] cand_i_float32;
+
+    assign cand_x_fix16   = cand_fifo_dout[CAND_WIDTH-1-:PT_WIDTH];
+    assign cand_y_fix16   = cand_fifo_dout[CAND_WIDTH-1-PT_WIDTH-:PT_WIDTH];
+    assign cand_z_fix16   = cand_fifo_dout[CAND_WIDTH-1-2*PT_WIDTH-:PT_WIDTH];
+    assign cand_i_float32 = cand_fifo_dout[PT_WIDTH_FLOAT32-1:0];
+
+    // 单路 intensity float_to_fixed：只给有效点做，节省资源
+    wire signed [PT_WIDTH-1:0] cand_intensity_fix16;
+
     float_to_fixed #(
         .FIXED_WIDTH     (PT_WIDTH_F_IS + PT_WIDTH_I_IS),
         .FIXED_FRACTIONAL(PT_WIDTH_F_IS)
-    ) float2fxp_intensity (
-        .float_in        (pt_intensity_float32),
-        .true_fixed_value(pt_intensity_fix16),
+    ) u_float2fxp_intensity_single (
+        .float_in        (cand_i_float32),
+        .true_fixed_value(cand_intensity_fix16),
         .fixed_sign      ()
     );
 
-    // 1) voxel_x / voxel_y 计算（沿用你原逻辑）
-    localparam signed [1+19-1:0] MULT_FACTOR = 20'd436907;  // 6.66666 缩放倍数
-    wire signed [PT_WIDTH_I_XY+PT_WIDTH_F_XY-1:0] bourdary_fix16 = THRESHOLD_BOUDARY;  // 54 Q8.8
-    wire [PT_WIDTH_I_XY+PT_WIDTH_F_XY-1:0] fxp_add_x_out;
-    wire [PT_WIDTH_I_XY+PT_WIDTH_F_XY+20-1:0] fxp_mul_x_out;
+    // ------------------------------------------------------------
+    // 单路 voxel_x / voxel_y 计算
+    // ------------------------------------------------------------
+    localparam signed [1+19-1:0] MULT_FACTOR = 20'd436907;
     localparam integer ROUND = 0;
+
+    wire signed [PT_WIDTH_I_XY+PT_WIDTH_F_XY-1:0] bourdary_fix16;
+    assign bourdary_fix16 = THRESHOLD_BOUDARY;
+
+    wire [PT_WIDTH_I_XY+PT_WIDTH_F_XY-1:0]    single_fxp_add_x_out;
+    wire [PT_WIDTH_I_XY+PT_WIDTH_F_XY+20-1:0] single_fxp_mul_x_out;
+    wire [PT_WIDTH_I_XY+PT_WIDTH_F_XY-1:0]    single_fxp_add_y_out;
+    wire [PT_WIDTH_I_XY+PT_WIDTH_F_XY+20-1:0] single_fxp_mul_y_out;
 
     fxp_add #(
         .WIIA (PT_WIDTH_I_XY),
@@ -161,9 +303,9 @@ module voxel_coor_pipe #(
         .WOF  (PT_WIDTH_F_XY),
         .ROUND(ROUND)
     ) fxp_add_voxel_x (
-        .ina     (pt_x_fix16),
+        .ina     (cand_x_fix16),
         .inb     (bourdary_fix16),
-        .out     (fxp_add_x_out),
+        .out     (single_fxp_add_x_out),
         .overflow()
     );
 
@@ -175,15 +317,12 @@ module voxel_coor_pipe #(
         .WOI  (36),
         .WOF  (0),
         .ROUND(ROUND)
-    ) fxp_mul_voxel_x (
-        .ina     (fxp_add_x_out),
+    ) u_single_fxp_mul_voxel_x (
+        .ina     (single_fxp_add_x_out),
         .inb     (MULT_FACTOR),
-        .out     (fxp_mul_x_out),
+        .out     (single_fxp_mul_x_out),
         .overflow()
     );
-
-    wire [PT_WIDTH_I_XY+PT_WIDTH_F_XY-1:0] fxp_add_y_out;
-    wire [PT_WIDTH_I_XY+PT_WIDTH_F_XY+20-1:0] fxp_mul_y_out;
 
     fxp_add #(
         .WIIA (PT_WIDTH_I_XY),
@@ -193,10 +332,10 @@ module voxel_coor_pipe #(
         .WOI  (PT_WIDTH_I_XY),
         .WOF  (PT_WIDTH_F_XY),
         .ROUND(ROUND)
-    ) fxp_add_voxel_y (
-        .ina     (pt_y_fix16),
+    ) u_single_fxp_add_voxel_y (
+        .ina     (cand_y_fix16),
         .inb     (bourdary_fix16),
-        .out     (fxp_add_y_out),
+        .out     (single_fxp_add_y_out),
         .overflow()
     );
 
@@ -208,76 +347,141 @@ module voxel_coor_pipe #(
         .WOI  (36),
         .WOF  (0),
         .ROUND(ROUND)
-    ) fxp_mul_voxel_y (
-        .ina     (fxp_add_y_out),
+    ) u_single_fxp_mul_voxel_y (
+        .ina     (single_fxp_add_y_out),
         .inb     (MULT_FACTOR),
-        .out     (fxp_mul_y_out),
+        .out     (single_fxp_mul_y_out),
         .overflow()
     );
 
-    // 截断成体素坐标
-    wire [VOXEL_WIDTH-1:0] voxel_x = fxp_mul_x_out[16+VOXEL_WIDTH-1:16];
-    wire [VOXEL_WIDTH-1:0] voxel_y = fxp_mul_y_out[16+VOXEL_WIDTH-1:16];
+    wire [VOXEL_WIDTH-1:0] single_voxel_x;
+    wire [VOXEL_WIDTH-1:0] single_voxel_y;
 
-    // abs
-    wire [15:0] ABS_pt_x_fix16 = (pt_x_fix16[15]) ? (~pt_x_fix16 + 1'b1) : pt_x_fix16;
-    wire [15:0] ABS_pt_y_fix16 = (pt_y_fix16[15]) ? (~pt_y_fix16 + 1'b1) : pt_y_fix16;
-    wire [15:0] ABS_pt_z_fix16 = (pt_z_fix16[15]) ? (~pt_z_fix16 + 1'b1) : pt_z_fix16;
+    assign single_voxel_x = single_fxp_mul_x_out[16+VOXEL_WIDTH-1:16];
+    assign single_voxel_y = single_fxp_mul_y_out[16+VOXEL_WIDTH-1:16];
 
-    // keep_point（组合）
-    always @(*) begin
+    wire [4*PT_WIDTH-1:0] single_point_proc;
+    assign single_point_proc = {cand_x_fix16, cand_y_fix16, cand_z_fix16, cand_intensity_fix16};
+
+
+    // ============================================================
+    // hash 输入 pipe1：一拍最多送 1 个有效点给 hash_table
+    // ============================================================
+    reg                   pipe1_valid;
+    reg [VOXEL_WIDTH-1:0] pipe1_voxel_x;
+    reg [VOXEL_WIDTH-1:0] pipe1_voxel_y;
+    reg [ 4*PT_WIDTH-1:0] pipe1_point_proc;
+
+    assign hash_req_valid = pipe1_valid;
+
+    wire [VOXEL_WIDTH-1:0] hash_key_x;
+    wire [VOXEL_WIDTH-1:0] hash_key_y;
+
+    assign hash_key_x = pipe1_voxel_x;
+    assign hash_key_y = pipe1_voxel_y;
+
+    // pipe1 为空，或者当前点已被 hash 接收，则可以装载下一个候选点
+    wire pipe1_can_accept;
+    assign pipe1_can_accept = !pipe1_valid || hash_fire;
+
+    wire cand_fifo_pop;
+    assign cand_fifo_pop = pipe1_can_accept && !cand_fifo_empty;
+
+    // 输入 ready：必须保证 candidate FIFO 至少还有 PREFILTER_LANES 个空位
+    // 同时考虑本拍可能 pop 出 1 个
+    wire [CAND_FIFO_CNT_W:0] cand_fifo_space_after_pop;
+    assign cand_fifo_space_after_pop = (CAND_FIFO_DEPTH - cand_fifo_level) + (cand_fifo_pop ? 1'b1 : 1'b0);
+
+    localparam [CAND_FIFO_CNT_W:0] CAND_FIFO_DEPTH_W = CAND_FIFO_DEPTH;
+    localparam [CAND_FIFO_CNT_W:0] PREFILTER_LANES_W = PREFILTER_LANES;
+
+    wire [CAND_FIFO_CNT_W:0] cand_fifo_level_ext;
+    wire [CAND_FIFO_CNT_W:0] cand_fifo_space_now;
+
+    assign cand_fifo_level_ext = {1'b0, cand_fifo_level};
+    assign cand_fifo_space_now = CAND_FIFO_DEPTH_W - cand_fifo_level_ext;
+
+    assign s_axis_dram_ready   = (cand_fifo_space_now >= PREFILTER_LANES_W);
+
+    // candidate FIFO 写读指针与 level 更新
+    integer wi;
+    always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            keep_point = 1'b0;
-            // end else if (point_raw == 128'd0) begin // invaild data 
-            //     keep_point <= 1'b0;
-            // end else if ((ABS_pt_x_fix16 <= THRESHOLD_CLOSE) && (ABS_pt_y_fix16 <= THRESHOLD_CLOSE)) begin
-            //     keep_point <= 1'b0;
-        end else if (^pt_x_fix16 === 1'bx || point_raw == 0) begin
-            keep_point = 1'b0;
-        end else if (ABS_pt_x_fix16 > THRESHOLD_BOUDARY || ABS_pt_y_fix16 > THRESHOLD_BOUDARY) begin
-            keep_point = 1'b0;
-        end else if (pt_z_fix16[15] ? (ABS_pt_z_fix16 > THRESHOLD_BOUDARY_Z_LOW) :
-                                        (ABS_pt_z_fix16 > THRESHOLD_BOUDARY_Z_HIGH)) begin
-            keep_point = 1'b0;
+            cand_fifo_wr_ptr <= {CAND_FIFO_PTR_W{1'b0}};
+            cand_fifo_rd_ptr <= {CAND_FIFO_PTR_W{1'b0}};
+            cand_fifo_level  <= {CAND_FIFO_CNT_W{1'b0}};
         end else begin
-            keep_point = 1'b1;
+            // 多 lane 写入
+            for (wi = 0; wi < PREFILTER_LANES; wi = wi + 1) begin
+                if (lane_push[wi]) begin
+                    cand_fifo_mem[cand_ptr_add(cand_fifo_wr_ptr, lane_prefix[wi])] <= lane_cand_data[wi];
+                end
+            end
+
+            if (cand_push_count != {CAND_FIFO_CNT_W{1'b0}}) begin
+                cand_fifo_wr_ptr <= cand_ptr_add(cand_fifo_wr_ptr, cand_push_count);
+            end
+
+            if (cand_fifo_pop) begin
+                cand_fifo_rd_ptr <= cand_ptr_add(cand_fifo_rd_ptr, {{(CAND_FIFO_CNT_W - 1) {1'b0}}, 1'b1});
+            end
+
+            cand_fifo_level <= cand_fifo_level
+                             + cand_push_count
+                             - (cand_fifo_pop ? {{(CAND_FIFO_CNT_W-1){1'b0}}, 1'b1}
+                                              : {CAND_FIFO_CNT_W{1'b0}});
         end
     end
 
-    // point_proc 组合值（Q8.8 拼起来）
-    wire [ 4*PT_WIDTH-1:0] point_proc_comb = {pt_x_fix16, pt_y_fix16, pt_z_fix16, pt_intensity_fix16};
-
-    // Hash 表的输入数据
-    reg                    pipe1_valid;
-    reg  [VOXEL_WIDTH-1:0] pipe1_voxel_x;
-    reg  [VOXEL_WIDTH-1:0] pipe1_voxel_y;
-    reg  [           63:0] pipe1_point_proc;
-    reg                    pipe1_keep_point;
-    assign hash_req_valid = pipe1_valid;
-    wire [VOXEL_WIDTH-1:0] hash_key_x = pipe1_voxel_x;
-    wire [VOXEL_WIDTH-1:0] hash_key_y = pipe1_voxel_y;
-    // 反压握手逻辑 (Stall logic)
-    // 如果 pipe1 有效数据且下游哈希表没准备好，则堵塞上游
-    wire                   pipe1_stall = pipe1_valid && !hash_fire;
-    assign upstream_can_accept = !pipe1_stall;
-
+    // pipe1 装载单路 voxel 结果
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            pipe1_valid <= 1'b0;
-            pipe1_keep_point <= 1'b0;
+            pipe1_valid      <= 1'b0;
+            pipe1_voxel_x    <= {VOXEL_WIDTH{1'b0}};
+            pipe1_voxel_y    <= {VOXEL_WIDTH{1'b0}};
+            pipe1_point_proc <= {4 * PT_WIDTH{1'b0}};
         end else begin
-            if (!pipe1_stall) begin
-                // 上游数据有效且在有效范围内，传递有效信号
-                pipe1_valid <= point_raw_vld && keep_point;
-                pipe1_keep_point <= keep_point;
+            if (pipe1_can_accept) begin
+                pipe1_valid <= cand_fifo_pop;
 
-                // 将算好的体素坐标和点特征打入寄存器
-                pipe1_voxel_x <= voxel_x;
-                pipe1_voxel_y <= voxel_y;
-                pipe1_point_proc <= point_proc_comb;
+                if (cand_fifo_pop) begin
+                    pipe1_voxel_x    <= single_voxel_x;
+                    pipe1_voxel_y    <= single_voxel_y;
+                    pipe1_point_proc <= single_point_proc;
+                end
             end
         end
     end
+
+
+    // ============================================================
+    // frame_end 延迟：等待 candidate FIFO、pipe1、hash 对齐流水排空
+    // ============================================================
+    reg  frame_end_pending;
+
+    wire frontend_empty;
+
+    reg  pproc_vld_d1;
+    reg  pproc_vld_d2;
+    reg  pproc_vld_d3;
+    // 后面的 pproc_vld_d1/d2/d3 在下一节定义
+    assign frontend_empty = cand_fifo_empty && !pipe1_valid && !pproc_vld_d1 && !pproc_vld_d2 && !pproc_vld_d3;
+
+    wire hash_frame_end;
+    assign hash_frame_end = frame_end_pending && frontend_empty;
+
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            frame_end_pending <= 1'b0;
+        end else begin
+            if (frame_end) begin
+                frame_end_pending <= 1'b1;
+            end else if (hash_frame_end) begin
+                frame_end_pending <= 1'b0;
+            end
+        end
+    end
+
 
     wire                       hash_found;
     wire                       hash_busy;
@@ -285,15 +489,16 @@ module voxel_coor_pipe #(
     wire [HASH_ADDR_WIDTH-1:0] hash_out_idx;
     wire [       VN_WIDTH-1:0] hash_out_point_number;
     hash_bucket_table #(
-        .COORD_WIDTH      (VOXEL_WIDTH),
-        .VN_WIDTH         (VN_WIDTH),
-        .LIFE_CYCLE       (LIFE_CYCLE),
-        .TIMER_WIDTH      (16),               // NOTE max 37650
-        .ADDR_WIDTH       (HASH_ADDR_WIDTH),
-        .BUCKETS          (64),
-        .BUCKET_SLOT_WIDTH(2),
-        .BRAM_ADDR_WIDTH  (BRAM_ADDR_WIDTH),
-        .BRAM_DATA_WIDTH  (BRAM_DATA_WIDTH)
+        .COORD_WIDTH        (VOXEL_WIDTH),
+        .VN_WIDTH           (VN_WIDTH),
+        .LIFE_CYCLE         (LIFE_CYCLE),
+        .TIMER_WIDTH        (DRAM_ADDR_WIDTH),     // NOTE max 37650
+        .ADDR_WIDTH         (HASH_ADDR_WIDTH),
+        .BUCKETS            (64),
+        .BUCKET_SLOT_WIDTH  (2),
+        .BRAM_ADDR_WIDTH    (BRAM_ADDR_WIDTH),
+        .BRAM_DATA_WIDTH    (BRAM_DATA_WIDTH),
+        .BRAM_ADDR_WIDTH_PFE(BRAM_ADDR_WIDTH_PFE)
     ) u_hash_table_tombstone (
         .clk                 (clk),
         .rst_n               (rst_n),
@@ -301,10 +506,9 @@ module voxel_coor_pipe #(
         .req_valid           (hash_req_valid),
         .frame_end           (frame_end),
         .flush_done          (flush_done),
+        .hash_stall          (hash_stall),
         .key_x               (hash_key_x),
         .key_y               (hash_key_y),
-        .busy                (hash_busy),
-        .found               (hash_found),
         .out_idx             (hash_out_idx),           // 0-255
         .out_point_number    (hash_out_point_number),  // 1-20
         .table_full          (hash_table_full),
@@ -327,37 +531,38 @@ module voxel_coor_pipe #(
 
     // ---------------------------与 hash 对齐-------------------------
     reg [4*PT_WIDTH-1:0] pproc_d1, pproc_d2, pproc_d3;
-    reg [VOXEL_WIDTH*2-1:0] pproc_d1_voxel, pproc_d2_voxel, pproc_d3_voxel;
-    reg pproc_drop_d1, pproc_drop_d2, pproc_drop_d3;
-    reg hash_req_ready_1delay, hash_req_ready_2delay;
 
-    wire pipe_pproc_stall = hash_req_ready;
-    wire pipe_bram_stall = hash_req_ready_1delay;
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            pproc_d1 <= 64'd0;
-            pproc_d2 <= 64'd0;
-            pproc_d3 <= 64'd0;
-            pproc_drop_d1 <= 1'b0;
-            pproc_drop_d2 <= 1'b0;
-            pproc_drop_d3 <= 1'b0;
-        end else if (pipe_pproc_stall) begin  // pproc_d3需要和 hash_out_idx对齐
-            // pproc_vld_d1 <= (hash_fire | u_hash_table_tombstone.kill_expired);
-            pproc_drop_d1 <= !pipe1_keep_point;
-            pproc_drop_d2 <= pproc_drop_d1;
-            pproc_drop_d3 <= pproc_drop_d2;
+            pproc_d1     <= {4 * PT_WIDTH{1'b0}};
+            pproc_d2     <= {4 * PT_WIDTH{1'b0}};
+            pproc_d3     <= {4 * PT_WIDTH{1'b0}};
 
-            pproc_d1 <= pipe1_point_proc;
-            pproc_d2 <= pproc_d1;
-            pproc_d3 <= pproc_d2;
+            pproc_vld_d1 <= 1'b0;
+            pproc_vld_d2 <= 1'b0;
+            pproc_vld_d3 <= 1'b0;
+        end else begin
+            pproc_vld_d1 <= hash_fire;
+            pproc_vld_d2 <= pproc_vld_d1;
+            pproc_vld_d3 <= pproc_vld_d2;
 
-            pproc_d1_voxel <= {pipe1_voxel_x, pipe1_voxel_y};
-            pproc_d2_voxel <= pproc_d1_voxel;
-            pproc_d3_voxel <= pproc_d2_voxel;
+            if (hash_fire) begin
+                pproc_d1 <= pipe1_point_proc;
+            end
+
+            if (pproc_vld_d1) begin
+                pproc_d2 <= pproc_d1;
+            end
+
+            if (pproc_vld_d2) begin
+                pproc_d3 <= pproc_d2;
+            end
         end
     end
 
-
+    reg hash_req_ready_1delay, hash_req_ready_2delay;
+    wire pipe_pproc_stall = hash_req_ready;
+    wire pipe_bram_stall = hash_req_ready_1delay;
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             hash_req_ready_1delay <= 1'b0;
@@ -378,18 +583,18 @@ module voxel_coor_pipe #(
         input [3:0] slot;
         reg [BRAM_DATA_WIDTH/8-1:0] mask;
         begin
-            mask = {BRAM_DATA_WIDTH / 8{1'b0}};
+            mask            = {BRAM_DATA_WIDTH / 8{1'b0}};
             mask[slot*8+:8] = 8'hFF;
-            slot_bwen_64 = mask;
+            slot_bwen_64    = mask;
         end
     endfunction
 
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            bram_voxelpoint_wr <= 1'b0;
-            bram_voxelpoint_bwen <= {BRAM_DATA_WIDTH / 8{1'b0}};
-            bram_voxelpoint_wrdata <= {POINTS_PER_ROW{1'b0}};
-            bram_voxelpoint_addr <= {BRAM_ADDR_WIDTH{1'b0}};
+            bram_voxelpoint_wr     <= 1'b0;
+            bram_voxelpoint_bwen   <= {BRAM_DATA_WIDTH / 8{1'b0}};
+            bram_voxelpoint_wrdata <= {BRAM_DATA_WIDTH{1'b0}};
+            bram_voxelpoint_addr   <= {BRAM_ADDR_WIDTH{1'b0}};
         end else begin
             bram_voxelpoint_wr   <= 1'b0;
             bram_voxelpoint_bwen <= {BRAM_DATA_WIDTH / 8{1'b0}};
@@ -397,11 +602,11 @@ module voxel_coor_pipe #(
             if (pipe_bram_stall) begin
                 // hash_found 表示 hit 或者新插入成功；table_full 时 found=0
                 // 同时加一个上限：每体素最多 20 点
-                if (!pproc_drop_d3 && (hash_out_point_number <= MAX_VOXEL_NUM[VN_WIDTH-1:0]) && (hash_out_point_number != {VN_WIDTH{1'b0}})) begin
-                    bram_voxelpoint_wr <= 1'b1;
-                    bram_voxelpoint_addr <= bram_row_addr;
+                if ((hash_out_point_number <= MAX_VOXEL_NUM[VN_WIDTH-1:0]) && (hash_out_point_number != {VN_WIDTH{1'b0}})) begin
+                    bram_voxelpoint_wr     <= 1'b1;
+                    bram_voxelpoint_addr   <= bram_row_addr;
                     bram_voxelpoint_wrdata <= {POINTS_PER_ROW{pproc_d3}};
-                    bram_voxelpoint_bwen <= slot_bwen_64(bram_slot_idx);
+                    bram_voxelpoint_bwen   <= slot_bwen_64(bram_slot_idx);
                 end
             end
         end
@@ -410,18 +615,17 @@ module voxel_coor_pipe #(
 
 
 
-
 `ifndef SYNTHESIS
     // ===================================================================
-    // 🚦 仿真专用监控探针：点云坐标与 Intensity 有效范围检测
+    // 仿真专用监控探针：点云坐标与 Intensity 有效范围检测
     // ===================================================================
     real dbg_pt_x, dbg_pt_y, dbg_pt_z, dbg_pt_i;
     real orig_float_x, orig_float_y, orig_float_z, orig_float_i;
 
     // 纯 Verilog-2001 兼容的 IEEE-754 单精度解析函数
     function real decode_float32(input [31:0] bits);
-        reg sign;
-        reg [7:0] exp;
+        reg        sign;
+        reg [ 7:0] exp;
         reg [22:0] frac;
         begin
             sign = bits[31];
@@ -456,98 +660,98 @@ module voxel_coor_pipe #(
     //         // 1. 监控 X 坐标: [-54.0, 54.0]
     //         if (dbg_pt_x < -54.0 || dbg_pt_x > 54.0) begin
     //             $display(
-    //                 "[🧨 RANGE WARNING][%0t] pt_x OUT OF BOUNDS! Fixed Val: %0.3f (Q8.8: 0x%04X) | Orig Float32: %0.3f",
+    //                 "[RANGE WARNING][%0t] pt_x OUT OF BOUNDS! Fixed Val: %0.3f (Q8.8: 0x%04X) | Orig Float32: %0.3f",
     //                 $time, dbg_pt_x, pt_x_fix16 & 16'hFFFF, orig_float_x);
     //         end
 
     //         // 2. 监控 Y 坐标: [-54.0, 54.0]
     //         if (dbg_pt_y < -54.0 || dbg_pt_y > 54.0) begin
     //             $display(
-    //                 "[🧨 RANGE WARNING][%0t] pt_y OUT OF BOUNDS! Fixed Val: %0.3f (Q8.8: 0x%04X) | Orig Float32: %0.3f",
+    //                 "[RANGE WARNING][%0t] pt_y OUT OF BOUNDS! Fixed Val: %0.3f (Q8.8: 0x%04X) | Orig Float32: %0.3f",
     //                 $time, dbg_pt_y, pt_y_fix16 & 16'hFFFF, orig_float_y);
     //         end
 
     //         // 3. 监控 Z 坐标: [-5.0, 3.0]
     //         if (dbg_pt_z < -5.0 || dbg_pt_z > 3.0) begin
     //             $display(
-    //                 "[🧨 RANGE WARNING][%0t] pt_z OUT OF BOUNDS! Fixed Val: %0.3f (Q8.8: 0x%04X) | Orig Float32: %0.3f",
+    //                 "[RANGE WARNING][%0t] pt_z OUT OF BOUNDS! Fixed Val: %0.3f (Q8.8: 0x%04X) | Orig Float32: %0.3f",
     //                 $time, dbg_pt_z, pt_z_fix16 & 16'hFFFF, orig_float_z);
     //         end
 
     //         // 4. 监控 Intensity: [0, 256.0]
     //         if (dbg_pt_i < 0.0 || dbg_pt_i > 256.0) begin
     //             $display(
-    //                 "[🧨 RANGE WARNING][%0t] pt_intensity OUT OF BOUNDS! Fixed Val: %0.3f (Q8.8: 0x%04X) | Orig Float32: %0.3f",
+    //                 "[RANGE WARNING][%0t] pt_intensity OUT OF BOUNDS! Fixed Val: %0.3f (Q8.8: 0x%04X) | Orig Float32: %0.3f",
     //                 $time, dbg_pt_i, pt_intensity_fix16 & 16'hFFFF, orig_float_i);
     //         end
     //     end
     // end
 
 
-    reg [31:0] stall_cnt;  // 32位计数器，足够统计很长时间
-    // 阻塞条件：有有效请求 (point_raw_vld && keep_point) 但 Hash 表未 Ready
-    wire is_stalled = (point_raw_vld && keep_point) && (!hash_req_ready);
-    always @(posedge clk or negedge rst_n) begin
-        if (!rst_n) begin
-            stall_cnt <= 32'd0;
-        end else begin
-            if (is_stalled) begin
-                stall_cnt <= stall_cnt + 1'b1;
-            end
-        end
-    end
+    // reg  [31:0] stall_cnt;  // 32位计数器，足够统计很长时间
+    // // 阻塞条件：有有效请求 (point_raw_vld && keep_point) 但 Hash 表未 Ready
+    // wire        is_stalled = (point_raw_vld && keep_point) && (!hash_req_ready);
+    // always @(posedge clk or negedge rst_n) begin
+    //     if (!rst_n) begin
+    //         stall_cnt <= 32'd0;
+    //     end else begin
+    //         if (is_stalled) begin
+    //             stall_cnt <= stall_cnt + 1'b1;
+    //         end
+    //     end
+    // end
 
-    reg [VOXEL_WIDTH-1:0] voxel_x_test = 11'd339;
-    reg [VOXEL_WIDTH-1:0] voxel_y_test = 11'd359;
+    // reg [VOXEL_WIDTH-1:0] voxel_x_test = 11'd261;
+    // reg [VOXEL_WIDTH-1:0] voxel_y_test = 11'd497;
 
-    wire test_reg = (voxel_x == voxel_x_test) && (voxel_y == voxel_y_test);
-    wire test_vector = (bram_voxelpoint_addr == 9'd80) && ((bram_voxelpoint_bwen == 80'h000000000000000000ff));
-    wire [VOXEL_WIDTH-1:0] pproc_d3_voxel_x = pproc_d3_voxel[VOXEL_WIDTH*2-1:VOXEL_WIDTH];
-    wire [VOXEL_WIDTH-1:0] pproc_d3_voxel_y = pproc_d3_voxel[VOXEL_WIDTH-1:0];
-    reg [1:0] test_reg_rise_cnt;
-    reg test_reg_d;
+    // wire test_reg = (voxel_x == voxel_x_test) && (voxel_y == voxel_y_test);
+    // wire test_vector = (bram_voxelpoint_addr == 9'd80) && ((bram_voxelpoint_bwen == 80'h000000000000000000ff));
+    // wire [VOXEL_WIDTH-1:0] pproc_d3_voxel_x = pproc_d3_voxel[VOXEL_WIDTH*2-1:VOXEL_WIDTH];
+    // wire [VOXEL_WIDTH-1:0] pproc_d3_voxel_y = pproc_d3_voxel[VOXEL_WIDTH-1:0];
+    // reg [1:0] test_reg_rise_cnt;
+    // reg test_reg_d;
 
-    // test_reg 第三次上升沿时打印上层 BRAM 指定地址内容
-    always @(posedge clk or negedge rst_n) begin
-        if (!rst_n) begin
-            test_reg_rise_cnt <= 2'd0;
-            test_reg_d <= 1'b0;
-        end else begin
-            test_reg_d <= test_reg;
-            if (test_reg && !test_reg_d) begin
-                if (test_reg_rise_cnt == 2'd2) begin
-                    $display("[voxel_coor_pipe][%0d] TEST_REG_3RD: mem[60]=0x%0h", u_hash_table_tombstone.global_timer,
-                             tb_voxelize.dut.u_voxelpoint_bram.mem[60]);
-                end
-                if (test_reg_rise_cnt != 2'd3) begin
-                    test_reg_rise_cnt <= test_reg_rise_cnt + 1'b1;
-                end
-            end
-        end
-    end
+    // // test_reg 第三次上升沿时打印上层 BRAM 指定地址内容
+    // always @(posedge clk or negedge rst_n) begin
+    //     if (!rst_n) begin
+    //         test_reg_rise_cnt <= 2'd0;
+    //         test_reg_d        <= 1'b0;
+    //     end else begin
+    //         test_reg_d <= test_reg;
+    //         if (test_reg && !test_reg_d) begin
+    //             if (test_reg_rise_cnt == 2'd2) begin
+    //                 $display("[voxel_coor_pipe][%0d] TEST_REG_3RD: mem[60]=0x%0h", u_hash_table_tombstone.global_timer,
+    //                          tb_voxelize.dut.u_voxelpoint_bram.mem[60]);
+    //             end
+    //             if (test_reg_rise_cnt != 2'd3) begin
+    //                 test_reg_rise_cnt <= test_reg_rise_cnt + 1'b1;
+    //             end
+    //         end
+    //     end
+    // end
 
-    // 调试触发：命中指定 BRAM 写地址/掩码时，打印 pproc_d3_voxel 及其拆分坐标
-    always @(posedge clk) begin
-        if (rst_n && test_vector) begin
-            $display("[voxel_coor_pipe][%0d] BRAM_HIT: addr=%0d bwen=0x%020h pproc_d3_voxel=0x%0h voxel_x=%0d voxel_y=%0d",
-                     u_hash_table_tombstone.global_timer, bram_voxelpoint_addr, bram_voxelpoint_bwen, pproc_d3_voxel,
-                     pproc_d3_voxel_x, pproc_d3_voxel_y);
-        end
-    end
+    // // 调试触发：命中指定 BRAM 写地址/掩码时，打印 pproc_d3_voxel 及其拆分坐标
+    // always @(posedge clk) begin
+    //     if (rst_n && test_vector) begin
+    //         $display("[voxel_coor_pipe][%0d] BRAM_HIT: addr=%0d bwen=0x%020h pproc_d3_voxel=0x%0h voxel_x=%0d voxel_y=%0d",
+    //                  u_hash_table_tombstone.global_timer, bram_voxelpoint_addr, bram_voxelpoint_bwen, pproc_d3_voxel,
+    //                  pproc_d3_voxel_x, pproc_d3_voxel_y);
+    //     end
+    // end
 
-    // 调试断点：命中指定体素坐标时打印定点值并a中断仿真
-    always @(posedge clk) begin
-        if (rst_n && point_raw_vld && keep_point && test_reg) begin
-            $display(
-                "[voxel_coor_pipe][%0t] BREAK: voxel_x=%0d voxel_y=%0d global_timer=%0d pt_x=%0f pt_y=%0f pt_z=%0f (Q8.8)",
-                $time, voxel_x, voxel_y, u_hash_table_tombstone.global_timer, $itor($signed(pt_x_fix16)) / 256.0, $itor
-                ($signed(pt_y_fix16)) / 256.0, $itor($signed(pt_z_fix16)) / 256.0);
-            // $stop;
-        end
-    end
+    // // 调试断点：命中指定体素坐标时打印定点值并a中断仿真
+    // always @(posedge clk) begin
+    //     if (rst_n && point_raw_vld && keep_point && test_reg) begin
+    //         $display(
+    //             "[voxel_coor_pipe][%0t] BREAK: voxel_x=%0d voxel_y=%0d global_timer=%0d pt_x=%0f pt_y=%0f pt_z=%0f (Q8.8)",
+    //             $time, voxel_x, voxel_y, u_hash_table_tombstone.global_timer, $itor($signed(pt_x_fix16)) / 256.0, $itor
+    //             ($signed(pt_y_fix16)) / 256.0, $itor($signed(pt_z_fix16)) / 256.0);
+    //         // $stop;
+    //     end
+    // end
 
 
-    wire test_reg_voxel = (pproc_d3_voxel == {voxel_x_test, voxel_y_test});
+    // wire test_reg_voxel = (pproc_d3_voxel == {voxel_x_test, voxel_y_test});
 
 `endif
 

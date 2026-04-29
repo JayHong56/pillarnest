@@ -4,7 +4,7 @@ import numpy as np
 # ==========================================
 # 1. TXT 权重与偏置加载工具
 # ==========================================
-def load_float_txt(weight_file: str, bias_file: str, out_dim=48, in_dim=11):
+def load_float_txt(weight_file: str, bias_file: str, out_dim=64, in_dim=9):
     """
     从 .txt 文件中读取浮点权重和偏置
     如果 np.savetxt 导出时是空格或换行分隔，loadtxt 会自动处理
@@ -36,7 +36,7 @@ class PfnLayerFloatSoftware:
 
     def process_voxel(self, points_list: list) -> np.ndarray:
         if not points_list:
-            return np.zeros(48, dtype=np.float32)
+            return np.zeros(64, dtype=np.float32)
 
         # 1. 转换为输入矩阵 X，形状 (N, 11)，使用 float32 防止溢出
         X = np.array(points_list, dtype=np.float32)
@@ -62,8 +62,10 @@ if __name__ == "__main__":
 
     # 1. 从 txt 文件加载权重 (请替换为你的真实路径)
     # 如果你的 txt 是逗号分隔的，可以在 loadtxt 加上参数：delimiter=','
-    weight_path = r"E:\verilog\pillarnest\rtl\.parameter\float\W_fused_fp32.txt"
-    bias_path   = r"E:\verilog\pillarnest\rtl\.parameter\float\b_fused_fp32.txt"
+    # weight_path = r"E:\verilog\pillarnest\rtl\.parameter\float\W_fused_fp32.txt"
+    # bias_path   = r"E:\verilog\pillarnest\rtl\.parameter\float\b_fused_fp32.txt"
+    weight_path = "E:\\mmdetection3d\\my_output_parameters\\pfn_layer_fused_int_kitti\\W_fused_fp32.txt"
+    bias_path   = "E:\\mmdetection3d\\my_output_parameters\\pfn_layer_fused_int_kitti\\b_fused_fp32.txt"
 
     W_fp16, B_fp32 = load_float_txt(weight_path, bias_path)
     print(f"✅ 成功加载权重矩阵 W 形状: {W_fp16.shape}，数据类型: {W_fp16.dtype}")
@@ -74,8 +76,8 @@ if __name__ == "__main__":
 
     # 3. 模拟测试数据 (上游传来的点云集合)
     points_in_voxel = [
-        [-14.019531, 21.699219, 1.187500, 21.000000, 0.000000, 0.000000, -0.003906, -0.304688, 0.007813, 0.027344, 2.187500],
-        [-14.019531, 21.707031, 1.796875, 19.000000, 0.000000, 0.000000,  0.003906,  0.304688, 0.007813, 0.035156, 2.796875]
+        [0.000000,-9.460938,0.528809,0.299988,-0.011719,0.050781,-0.001953,-0.078125,0.058594],
+        [0.027344,-9.562500,0.532959,0.500000,0.015625,-0.050781,0.002197,-0.050781,-0.042969]
     ]
 
     print(f"\n📡 正在执行矩阵运算...")
@@ -83,7 +85,7 @@ if __name__ == "__main__":
 
     # 4. 打印输出
     print("\n✅ Voxel 特征提取完毕！(48维向量)")
-    for c in range(10):
+    for c in range(64):
         print(f"      Ch[{c:02d}] 真实浮点特征 = {output_features[c]:.6f}")
     
     print("      ... (后 38 维省略)")

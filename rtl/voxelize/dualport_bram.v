@@ -44,12 +44,13 @@ module dualport_bram #(
     endgenerate
 
     integer idx;
+`ifndef SYNTHESIS
     initial begin
         for (idx = 0; idx < (1 << ADDR_WIDTH); idx = idx + 1) begin
             mem[idx] = {DATA_WIDTH{1'b0}};
         end
     end
-
+`endif
     // 循环变量
     integer i;
 

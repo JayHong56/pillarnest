@@ -10,28 +10,6 @@ from python.scripts.csv_sim_process import convert_sim_to_csv
 import struct
 import math
 
-# -----------------------------
-# 2. 体素化流水线计算
-# -----------------------------
-# -----------------------------
-# 2. 体素化流水线计算 (简单软件浮点实现)
-# -----------------------------
-class VoxelCoorPipe:
-    def __init__(self, hash_sim):
-        self.hash_sim = hash_sim
-        self.VOXEL_WIDTH = 11
-        
-        # 物理边界参数 (对应原代码中的 Q8.8 格式硬编码)
-        self.X_MIN = -54.0
-        self.X_MAX = 54.0
-        self.Y_MIN = -54.0
-        self.Y_MAX = 54.0
-        self.Z_MIN = -5.0
-        self.Z_MAX = 3.0
-        
-        # 体素大小 (原始 MULT_FACTOR 436907 对应的是 1/0.15 的定点近似)
-        self.VOXEL_SIZE = 0.15
-
 class VoxelCoorPipe:
     # 增加 out_log_file 参数
     def __init__(self, hash_sim, out_log_file=None):
@@ -39,14 +17,16 @@ class VoxelCoorPipe:
         self.out_log_file = out_log_file
         self.VOXEL_WIDTH = 11
         
-        self.X_MIN = -54.0
-        self.X_MAX = 54.0
-        self.Y_MIN = -54.0
-        self.Y_MAX = 54.0
-        self.Z_MIN = -5.0
-        self.Z_MAX = 3.0
+        # 物理边界参数 (对应原代码中的 Q8.8 格式硬编码)
+        self.X_MIN = 0
+        self.X_MAX = 69.12
+        self.Y_MIN = -39.68
+        self.Y_MAX = 39.68
+        self.Z_MIN = -3.0
+        self.Z_MAX = 1.0
         
-        self.VOXEL_SIZE = 0.15
+        # 体素大小 (原始 MULT_FACTOR 436907 对应的是 1/0.15 的定点近似)
+        self.VOXEL_SIZE = 0.16
 
     def process_point(self, x_f32: float, y_f32: float, z_f32: float, intensity_f32: float) -> bool:
         if not (self.X_MIN <= x_f32 <= self.X_MAX): return False
@@ -76,8 +56,8 @@ ST_OCCU  = 0b01
 ST_TOMB  = 0b10
 
 COORD_WIDTH = 11
-VN_WIDTH = 5
-TIMER_WIDTH = 16
+VN_WIDTH = 6
+TIMER_WIDTH = 18
 
 # 4-Choice 架构配置
 NUM_TABLES = 4         # 对应 4 个 Seed
@@ -356,9 +336,9 @@ class HashBucketTableSim:
             target_bucket = hashes[hit_idx]
             old_e = self.tables[target_table][target_bucket]
             
-            # 当 pn 等于 20 时，不再加 1，保持为 20
-            if old_e.pn == 20:
-                new_pn = 20
+            # 当 pn 等于 32 时，不再加 1，保持为 32
+            if old_e.pn == 32:
+                new_pn = 32
             else:
                 new_pn = mask_u(old_e.pn + 1, VN_WIDTH)
             

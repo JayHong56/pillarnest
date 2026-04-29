@@ -24,12 +24,13 @@ module hash_bucket_bram #(
 );
     (* ram_style="block" *) reg [WIDTH-1:0] mem[0:DEPTH-1];
     integer idx;
+`ifndef SYNTHESIS
     initial begin
         for (idx = 0; idx < (1 << AW); idx = idx + 1) begin
             mem[idx] = {WIDTH{1'b0}};
         end
     end
-
+`endif
 
     // 循环变量
     integer i;
