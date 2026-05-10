@@ -1,347 +1,376 @@
-import os
+# pfn_bittrue_sim.py
+# Bit-true functional simulation for your pfn_layer.v
+# No timing simulation, only arithmetic behavior.
+
+from __future__ import annotations
+import math
+from typing import List
 
 
-# ==========================================
-# 1. 硬件位阶与符号扩展工具
-# ==========================================
-def mask_u(val: int, width: int) -> int:
-    """无符号截断，保留低 width 位"""
-    return val & ((1 << width) - 1)
+# ============================================================
+# 0. Parameters aligned with your RTL
+# ============================================================
+EXPAND_PT_DIM = 9
+OUT_PT_DIM = 64
+PT_WIDTH = 16
+WEIGHT_WIDTH = 16
+ACC_WIDTH = 32
+
+# RTL:
+# dequant_temp[j] = st3_mac_tree[j] * 779;
+# relu_comb[j]    = dequant_temp[j][PT_WIDTH+20-1 : 20];
+DEQUANT_MUL = 3482
+DEQUANT_SHIFT = 28
+
+# In your RTL debug print:
+# dim2 and dim6 are Q4.12, others are Q1.15
+Q412_DIMS = {2, 6}
+
+# Change these to your real .mem paths.
+WEIGHT_MEM_PATH = r"E:\mmdetection3d\my_output_parameters\pfn_layer_fused_int_kitti\mem\pfn_weight_2.mem"
+BIAS_MEM_PATH = r"E:\mmdetection3d\my_output_parameters\pfn_layer_fused_int_kitti\mem\bias.mem"
+
+# If your weight.mem is exported according to RTL slicing:
+# weight_row_rom[oc][i*16 +: 16], then dim0 is at LSB.
+WEIGHT_DIM0_AT_LSB = False
 
 
-def sign_extend(val: int, width: int) -> int:
-    """符号位扩展并限制位宽，模拟 FPGA 寄存器的自然溢出与截断"""
-    val = mask_u(val, width)
+# ============================================================
+# 1. Direct input: all points inside one voxel
+#    Order: dim0, dim1, ..., dim8
+# ============================================================
+points_in_voxel = [
+    # [-0.065430, -0.070313, 0.171875, 0.479980, 0.000000, 0.000000, 0.000000, -0.065430, -0.070313],
+    [-0.0650, -0.0700, 0.1720, 0.4800, 0.0000, 0.0000, 0.0000, -0.0650, -0.0700],
+    # Add more points here:
+    # [dim0, dim1, dim2, dim3, dim4, dim5, dim6, dim7, dim8],
+]
+
+
+# ============================================================
+# 2. Bit-level helpers
+# ============================================================
+def mask(width: int) -> int:
+    return (1 << width) - 1
+
+
+def u(val: int, width: int) -> int:
+    """Unsigned truncation to width bits."""
+    return val & mask(width)
+
+
+def s(val: int, width: int) -> int:
+    """Interpret val as signed two's complement of given width."""
+    val &= mask(width)
     sign_bit = 1 << (width - 1)
-    if val & sign_bit:
-        return val - (1 << width)
-    return val
+    return val - (1 << width) if (val & sign_bit) else val
 
 
-# ==========================================
-# 2. .mem 文件解析器
-# ==========================================
-def readmemh_bias(filepath: str, num_elements: int, width: int):
-    """解析 Bias 文件，例如 32-bit bias.mem"""
-    data = [0] * num_elements
+def add_s32(a: int, b: int) -> int:
+    """Verilog-like signed 32-bit addition with wrap-around."""
+    return s(u(a, 32) + u(b, 32), 32)
 
-    if filepath == "NOTHING" or not os.path.exists(filepath):
-        print(f"⚠️ 警告: 未找到 {filepath}，Bias 默认初始化为 0。")
-        return data
 
-    with open(filepath, "r", encoding="utf-8") as f:
-        row_idx = 0
+def mul_s32(a: int, b: int) -> int:
+    """int16 * int16 assigned into signed [31:0]."""
+    return s(a * b, 32)
+
+
+def fmt_hex(val: int, width: int) -> str:
+    return f"0x{u(val, width):0{width // 4}x}"
+
+
+def round_half_away_from_zero(x: float) -> int:
+    """
+    Used to reconstruct fixed-point integers from decimal float values.
+    If your decimal values are already printed from RTL CSV with 6 decimals,
+    nearest rounding usually recovers the original int16.
+    """
+    if x >= 0:
+        return int(math.floor(x + 0.5))
+    else:
+        return int(math.ceil(x - 0.5))
+
+
+def quantize_pfe_float_to_int16(value: float, dim: int) -> int:
+    """
+    Convert input decimal value to the int16 value seen by pfn_layer.
+
+    dim2, dim6 : Q4.12, scale = 4096
+    others     : Q1.15, scale = 32768
+    """
+    scale = 4096.0 if dim in Q412_DIMS else 32768.0
+    q = round_half_away_from_zero(value * scale)
+    return s(q, 16)
+
+
+def output_q8_8_to_float(q: int) -> float:
+    """
+    RTL output CSV decodes m_axis_pfn_data as signed / 256.0.
+    ReLU output should be non-negative, but signed interpretation is kept here.
+    """
+    return s(q, 16) / 256.0
+
+
+# ============================================================
+# 3. readmemh parser
+# ============================================================
+def readmemh_words(path: str) -> List[int]:
+    """
+    Basic $readmemh parser.
+    Supports:
+      - one or multiple hex words per line
+      - // comments
+      - @addr address directives
+    """
+    words: List[int] = []
+    addr = 0
+
+    with open(path, "r", encoding="utf-8") as f:
         for line in f:
-            line = line.split("//")[0].strip().replace("_", "")
+            line = line.split("//", 1)[0].strip()
             if not line:
                 continue
 
-            data[row_idx] = sign_extend(int(line, 16), width)
-            row_idx += 1
+            tokens = line.replace("\t", " ").split()
+            for tok in tokens:
+                if not tok:
+                    continue
 
-            if row_idx >= num_elements:
-                break
+                if tok.startswith("@"):
+                    addr = int(tok[1:], 16)
+                    while len(words) < addr:
+                        words.append(0)
+                    continue
 
-    if row_idx < num_elements:
+                tok = tok.replace("_", "")
+                val = int(tok, 16)
+
+                while len(words) <= addr:
+                    words.append(0)
+                words[addr] = val
+                addr += 1
+
+    return words
+
+
+def load_weight_mem(path: str) -> List[List[int]]:
+    """
+    Load weight_row_rom[0:OUT_PT_DIM-1].
+
+    RTL:
+        op_weight[i_j][i_k] =
+            $signed(weight_row_rom[sel_oc][i_k*WEIGHT_WIDTH +: WEIGHT_WIDTH]);
+
+    Therefore, by default:
+        dim0 is bits [15:0]
+        dim1 is bits [31:16]
+        ...
+        dim8 is bits [143:128]
+    """
+    words = readmemh_words(path)
+
+    if len(words) < OUT_PT_DIM:
+        raise ValueError(f"weight.mem has only {len(words)} rows, expected {OUT_PT_DIM}")
+
+    weights: List[List[int]] = []
+
+    for oc in range(OUT_PT_DIM):
+        row = words[oc] & mask(EXPAND_PT_DIM * WEIGHT_WIDTH)
+        w_row = []
+
+        for dim in range(EXPAND_PT_DIM):
+            if WEIGHT_DIM0_AT_LSB:
+                shift = dim * WEIGHT_WIDTH
+            else:
+                shift = (EXPAND_PT_DIM - 1 - dim) * WEIGHT_WIDTH
+
+            w = s((row >> shift) & mask(WEIGHT_WIDTH), WEIGHT_WIDTH)
+            w_row.append(w)
+
+        weights.append(w_row)
+
+    return weights
+
+
+def load_bias_mem(path: str) -> List[int]:
+    """
+    Load bias_rom[0:OUT_PT_DIM-1] as signed 32-bit.
+    Your RTL currently uses:
+        op_bias[i_j] = $signed(bias_rom[sel_oc]);
+    No <<< 8 shift here.
+    """
+    words = readmemh_words(path)
+
+    if len(words) < OUT_PT_DIM:
+        raise ValueError(f"bias.mem has only {len(words)} rows, expected {OUT_PT_DIM}")
+
+    return [s(words[oc], ACC_WIDTH) for oc in range(OUT_PT_DIM)]
+
+
+# ============================================================
+# 4. PFN arithmetic simulation
+# ============================================================
+def mac_tree_like_rtl(bias: int, mults: List[int]) -> int:
+    """
+    Match RTL addition grouping:
+
+    st3_mac_tree[j] <= (
+        (
+            (bias + mult0) +
+            (mult1 + mult2)
+        ) + (
+            (mult3 + mult4) +
+            (mult5 + mult6)
+        )
+    ) + (
+        mult7 + mult8
+    );
+
+    Every '+' is modeled as signed 32-bit wrap-around.
+    """
+    if len(mults) != 9:
+        raise ValueError("EXPAND_PT_DIM must be 9")
+
+    a0 = add_s32(bias, mults[0])
+    a1 = add_s32(mults[1], mults[2])
+    a = add_s32(a0, a1)
+
+    b0 = add_s32(mults[3], mults[4])
+    b1 = add_s32(mults[5], mults[6])
+    b = add_s32(b0, b1)
+
+    c = add_s32(mults[7], mults[8])
+
+    return add_s32(add_s32(a, b), c)
+
+
+def relu_dequant_like_rtl(mac: int) -> int:
+    """
+    RTL:
+        dequant_temp = st3_mac_tree * 779;
+        if (st3_mac_tree < 0)
+            relu = 0;
+        else
+            relu = dequant_temp[35:20];
+
+    No saturation. Just bit slice.
+    """
+    if mac < 0:
+        return 0
+
+    prod64 = s(mac, 32) * DEQUANT_MUL
+    prod64_u = u(prod64, 64)
+
+    relu16 = (prod64_u >> DEQUANT_SHIFT) & mask(16)
+    return relu16
+
+
+def pfn_one_point(q_point: List[int], weights: List[List[int]], biases: List[int]) -> List[int]:
+    """
+    Simulate one PFE point through PFN linear layer.
+    Output: 64 channels, each uint16 bit pattern.
+    """
+    if len(q_point) != EXPAND_PT_DIM:
+        raise ValueError(f"Each point must have {EXPAND_PT_DIM} dims")
+
+    out = []
+
+    for oc in range(OUT_PT_DIM):
+        mults = []
+        for dim in range(EXPAND_PT_DIM):
+            prod = mul_s32(q_point[dim], weights[oc][dim])
+            mults.append(prod)
+
+        mac = mac_tree_like_rtl(biases[oc], mults)
+        relu = relu_dequant_like_rtl(mac)
+        out.append(relu)
+
+    return out
+
+
+def pfn_voxel(points_float: List[List[float]], weights: List[List[int]], biases: List[int]) -> List[int]:
+    """
+    Simulate one voxel:
+      - quantize each input point to int16
+      - compute 64-dim PFN output per point
+      - max-pool over all points
+    """
+    max_pool = [0 for _ in range(OUT_PT_DIM)]
+
+    for pt_idx, pt in enumerate(points_float):
+        if len(pt) != EXPAND_PT_DIM:
+            raise ValueError(f"Point {pt_idx} has {len(pt)} dims, expected {EXPAND_PT_DIM}")
+
+        q_point = [quantize_pfe_float_to_int16(pt[dim], dim) for dim in range(EXPAND_PT_DIM)]
+
+        print(f"\nInput point {pt_idx}:")
+        for dim, qv in enumerate(q_point):
+            scale_name = "Q4.12" if dim in Q412_DIMS else "Q1.15"
+            print(f"  dim{dim}: float={pt[dim]: .6f}, {scale_name}, int={qv:7d}, hex={fmt_hex(qv, 16)}")
+
+        point_out = pfn_one_point(q_point, weights, biases)
+
+        print(f"  Per-point PFN output hex[0:8] = {[fmt_hex(v, 16) for v in point_out[:8]]}")
+
+        for oc in range(OUT_PT_DIM):
+            # RTL compares relu_comb with max_pool_regs.
+            # Values are non-negative bit patterns, so integer max is enough here.
+            if point_out[oc] > max_pool[oc]:
+                max_pool[oc] = point_out[oc]
+
+    return max_pool
+
+
+def pack_m_axis_pfn_data(out64: List[int]) -> int:
+    """
+    RTL output packing:
+        m_axis_pfn_data[oc*PT_WIDTH +: PT_WIDTH] = channel oc
+    Thus channel 0 is at LSB.
+    """
+    if len(out64) != OUT_PT_DIM:
+        raise ValueError(f"Expected {OUT_PT_DIM} output channels")
+
+    word = 0
+    for oc, val in enumerate(out64):
+        word |= u(val, 16) << (oc * 16)
+
+    return word
+
+
+# ============================================================
+# 5. Main
+# ============================================================
+def main() -> None:
+    weights = load_weight_mem(WEIGHT_MEM_PATH)
+    biases = load_bias_mem(BIAS_MEM_PATH)
+
+    out64 = pfn_voxel(points_in_voxel, weights, biases)
+
+    packed = pack_m_axis_pfn_data(out64)
+
+    print("\n" + "=" * 80)
+    print("Final voxel PFN max-pooled output")
+    print("=" * 80)
+
+    print("\nOutput int16/hex/Q8.8:")
+    for oc, val in enumerate(out64):
         print(
-            f"⚠️ 警告: Bias 文件行数不足，期望 {num_elements} 行，实际读取 {row_idx} 行。"
+            f"dim{oc:02d}: "
+            f"int={s(val, 16):7d}, "
+            f"hex={fmt_hex(val, 16)}, "
+            f"q8.8={output_q8_8_to_float(val): .6f}"
         )
 
-    return data
+    print("\nPacked m_axis_pfn_data:")
+    print(f"0x{packed:0{OUT_PT_DIM * 4}x}")
+
+    print("\nPython list, hex:")
+    print([fmt_hex(v, 16) for v in out64])
+
+    print("\nPython list, Q8.8 float:")
+    print([output_q8_8_to_float(v) for v in out64])
 
 
-def readmemh_weight(filepath: str, rows: int, cols: int, width: int):
-    """
-    解析 Weight 文件。
-
-    当前配置:
-        OUT_PT_DIM    = 64
-        EXPAND_PT_DIM = 9
-        WEIGHT_WIDTH  = 16
-
-    所以 weight.mem 期望:
-        64 行
-        每行 9 * 16 = 144 bit = 36 个 hex 字符
-
-    对齐硬件:
-        Verilog 中 weight_row_rom[sel_oc][i_k*WEIGHT_WIDTH+:WEIGHT_WIDTH]
-        因此每行 hex 的最右侧 16 bit 对应 k=0，
-        再往左依次对应 k=1, k=2, ..., k=8。
-    """
-    data = [[0] * cols for _ in range(rows)]
-
-    if filepath == "NOTHING" or not os.path.exists(filepath):
-        print(f"⚠️ 警告: 未找到 {filepath}，Weight 默认初始化为 0。")
-        return data
-
-    chars_per_col = width // 4
-    expected_len = cols * chars_per_col
-
-    with open(filepath, "r", encoding="utf-8") as f:
-        row_idx = 0
-        for line in f:
-            line = line.split("//")[0].strip().replace("_", "")
-            if not line:
-                continue
-
-            # 补齐前导 0，防止高位 0 被文本省略
-            line = line.zfill(expected_len)
-
-            # 如果文件每行比期望更长，保留低 expected_len 个 hex 字符，
-            # 这与 Verilog 固定位宽寄存器读入时保留低位的行为更接近。
-            if len(line) > expected_len:
-                line = line[-expected_len:]
-
-            # 从右向左切片，对齐 Verilog 的 [k*16+:16]
-            for k in range(cols):
-                right_idx = expected_len - k * chars_per_col
-                left_idx = right_idx - chars_per_col
-                val_hex = line[left_idx:right_idx]
-                data[row_idx][k] = sign_extend(int(val_hex, 16), width)
-
-            row_idx += 1
-
-            if row_idx >= rows:
-                break
-
-    if row_idx < rows:
-        print(f"⚠️ 警告: Weight 文件行数不足，期望 {rows} 行，实际读取 {row_idx} 行。")
-
-    return data
-
-
-# ==========================================
-# 3. PFN 硬件行为级仿真核心
-# ==========================================
-class PfnLayerBitTrue:
-    def __init__(self, weight_file="NOTHING", bias_file="NOTHING"):
-        # ------------------------------------------
-        # 硬件参数，对齐新版 pfn_layer
-        # ------------------------------------------
-        self.EXPAND_PT_DIM = 9
-        self.OUT_PT_DIM = 64
-        self.PT_WIDTH = 16
-        self.WEIGHT_WIDTH = 16
-        self.ACC_WIDTH = 32
-
-        # ------------------------------------------
-        # 载入定点权重与 bias
-        # ------------------------------------------
-        self.weights = readmemh_weight(
-            weight_file,
-            self.OUT_PT_DIM,
-            self.EXPAND_PT_DIM,
-            self.WEIGHT_WIDTH,
-        )
-
-        self.biases = readmemh_bias(
-            bias_file,
-            self.OUT_PT_DIM,
-            self.ACC_WIDTH,
-        )
-
-        # ------------------------------------------
-        # Max Pool 状态
-        # ReLU 后结果是非负 bit pattern，这里按 unsigned 保存
-        # ------------------------------------------
-        self.max_pool_regs = [0] * self.OUT_PT_DIM
-        self.pt_cnt = 0
-
-    def float_to_input_fixed(self, pt_data_float: list):
-        """
-        将 9 维浮点输入转换为 PFN 输入定点格式。
-
-        当前 9 维定义，列号从 0 开始:
-            dim 0: x                  Q8.8
-            dim 1: y                  Q8.8
-            dim 2: z                  Q4.12
-            dim 3: intensity          Q1.15
-            dim 4: x - mean           Q8.8
-            dim 5: y - mean           Q8.8
-            dim 6: z - mean           Q4.12
-            dim 7: x - vmean          Q8.8
-            dim 8: y - vmean          Q8.8
-
-        注意:
-            如果你的第 8 维实际是 z - vmean，则应把 dim 8 也按 Q4.12 处理。
-        """
-        assert (
-            len(pt_data_float) == self.EXPAND_PT_DIM
-        ), f"输入必须是 {self.EXPAND_PT_DIM} 维，当前是 {len(pt_data_float)} 维"
-
-        q_pt_data = []
-
-        for dim_idx, val in enumerate(pt_data_float):
-            if dim_idx == 3:
-                # intensity: Q1.15
-                fixed_val = int(round(val * 32768.0))
-            elif dim_idx == 2 or dim_idx == 6:
-                # z, z-mean: Q4.12
-                fixed_val = int(round(val * 4096.0))
-            else:
-                # others: Q8.8
-                fixed_val = int(round(val * 256.0))
-
-            q_pt_data.append(sign_extend(fixed_val, self.PT_WIDTH))
-
-        return q_pt_data
-
-    def process_point(
-        self, pt_data_float: list, is_last: bool, voxel_x: int = 0, voxel_y: int = 0
-    ):
-        """
-        单点输入，Voxel 结束时输出 64 维 PFN 特征。
-
-        输入:
-            pt_data_float: 9 维浮点输入，顺序为 dim0 到 dim8
-            is_last:      当前点是否为当前 voxel 的最后一个点
-            voxel_x/y:    仅用于输出记录
-
-        输出:
-            如果 is_last=False，返回 None。
-            如果 is_last=True，返回一个 dict。
-        """
-        # ---------------------------------------------------------
-        # [模拟 PFE] Float -> 输入定点格式
-        # ---------------------------------------------------------
-        q_pt_data = self.float_to_input_fixed(pt_data_float)
-
-        # 注意:
-        # 这里不要 reverse。
-        # Verilog 中 s_axis_pfe_data[k*PT_WIDTH+:PT_WIDTH] 对应第 k 维。
-        # Python 中 q_pt_data[k] 也应该对应第 k 维。
-        self.pt_cnt += 1
-
-        # ---------------------------------------------------------
-        # [模拟 PFN] MAC 累加树与 ReLU
-        # ---------------------------------------------------------
-        for ch in range(self.OUT_PT_DIM):
-            # 1. Bias 对齐
-            # Verilog: op_bias[i_j] = $signed(bias_rom[sel_oc]) <<< 8;
-            bias_val = sign_extend(self.biases[ch], self.ACC_WIDTH)
-            mac = sign_extend(bias_val << 8, self.ACC_WIDTH)
-
-            # 2. 9 路乘累加
-            for k in range(self.EXPAND_PT_DIM):
-                w = sign_extend(self.weights[ch][k], self.WEIGHT_WIDTH)
-                d = q_pt_data[k]
-
-                # Verilog st2_mult 是 ACC_WIDTH 位 signed
-                mult_res = sign_extend(w * d, self.ACC_WIDTH)
-
-                # Verilog st3_mac_tree 是 ACC_WIDTH 位 signed
-                mac = sign_extend(mac + mult_res, self.ACC_WIDTH)
-
-            # 3. 反量化倍数
-            # Verilog: dequant_temp[j_2] = st3_mac_tree[j_2] * 994;
-            dequant_temp = sign_extend(mac * 779, 64)
-
-            # 4. ReLU 与截断
-            # Verilog:
-            #   if (st3_mac_tree[j_2] < 0)
-            #       relu_comb[j_2] = 0;
-            #   else
-            #       relu_comb[j_2] = dequant_temp[j_2][PT_WIDTH+20-1 : 20];
-            if mac < 0:
-                relu_val = 0
-            else:
-                shifted_val = dequant_temp >> 20
-                relu_val = mask_u(shifted_val, self.PT_WIDTH)
-
-            # 5. Max Pool
-            # ReLU 后按 unsigned 比较
-            if relu_val > self.max_pool_regs[ch]:
-                self.max_pool_regs[ch] = relu_val
-
-        # ---------------------------------------------------------
-        # [模拟 PFN] Voxel 数据吐出
-        # ---------------------------------------------------------
-        if is_last:
-            out_features = list(self.max_pool_regs)
-
-            result = {
-                "voxel_x": voxel_x,
-                "voxel_y": voxel_y,
-                "pt_cnt": self.pt_cnt,
-                "data_q88": out_features,
-                # ReLU 输出按 unsigned Q8.8 还原
-                "data_float": [val / 256.0 for val in out_features],
-            }
-
-            # 清空 Max Pool 状态
-            self.max_pool_regs = [0] * self.OUT_PT_DIM
-            self.pt_cnt = 0
-
-            return result
-
-        return None
-
-
-# ==========================================
-# 4. 运行剧本
-# ==========================================
 if __name__ == "__main__":
-    print("=" * 60)
-    print("🚀 PFN 硬件级 Python 仿真器，新版: Float In -> Q8.8 Out")
-    print("   OUT_PT_DIM = 64, EXPAND_PT_DIM = 9")
-    print("=" * 60)
-
-    # 1. 实例化仿真模型
-    sim = PfnLayerBitTrue(
-        weight_file=r"E:\mmdetection3d\my_output_parameters\pfn_layer_fused_int_kitti\mem\pfn_weight.mem",
-        bias_file=r"E:\mmdetection3d\my_output_parameters\pfn_layer_fused_int_kitti\mem\bias.mem",
-    )
-
-    # 2. 模拟上游传来的点，9维:
-    #    x, y, z, intensity, x-mean, y-mean, z-mean, x-vmean, y-vmean
-    points_in_voxel = [
-[-0.078125,0.039063,-0.246826,0.189972,-0.070313,0.027344,0.195801,-0.078125,0.039063],
-[-0.070313,0.062500,-0.919922,0.479980,-0.062500,0.050781,-0.477295,-0.070313,0.062500],
-[-0.054688,0.062500,-1.577881,0.239990,-0.046875,0.050781,-1.135254,-0.054688,0.062500],
-[-0.042969,0.042969,-0.058838,0.589996,-0.035156,0.031250,0.383789,-0.042969,0.042969],
-[-0.039063,0.003906,0.125977,0.279999,-0.031250,-0.007813,0.568604,-0.039063,0.003906],
-[-0.023438,0.050781,-0.006836,0.259979,-0.015625,0.039063,0.435791,-0.023438,0.050781],
-[-0.007813,0.039063,-0.119873,0.579987,0.000000,0.027344,0.322754,-0.007813,0.039063],
-[-0.003906,0.003906,-0.546875,0.439972,0.003906,-0.007813,-0.104248,-0.003906,0.003906],
-[-0.003906,0.000000,-0.306885,0.389984,0.003906,-0.011719,0.135742,-0.003906,0.000000],
-[0.019531,-0.046875,-0.500000,0.209991,0.027344,-0.058594,-0.057373,0.019531,-0.046875],
-[0.042969,0.062500,-0.542969,0.529999,0.050781,0.050781,-0.100342,0.042969,0.062500],
-[0.054688,-0.074219,-1.057861,0.269989,0.062500,-0.085938,-0.615234,0.054688,-0.074219],
-[0.066406,-0.054688,-0.500977,0.229980,0.074219,-0.066406,-0.058350,0.066406,-0.054688],
-[0.066406,-0.007813,0.062988,0.359985,0.074219,-0.019531,0.505615,0.066406,-0.007813]
-
-    ]
-
-    vox_x, vox_y = 0, 188
-
-    # 3. 逐点输入并输出
-    print(
-        f"📡 送入 Voxel ({vox_x}, {vox_y})，包含 {len(points_in_voxel)} 个浮点坐标点..."
-    )
-
-    for i, pt_float in enumerate(points_in_voxel):
-        is_last_point = i == len(points_in_voxel) - 1
-
-        out = sim.process_point(
-            pt_float,
-            is_last=is_last_point,
-            voxel_x=vox_x,
-            voxel_y=vox_y,
-        )
-
-        if out is not None:
-            print("\n✅ PFN Layer 运算完毕，触发输出：")
-            print(
-                f"  📍 坐标: X={out['voxel_x']}, Y={out['voxel_y']} | 总点数: {out['pt_cnt']}"
-            )
-            print(f"  📊 {sim.OUT_PT_DIM}维特征输出:")
-
-            for c in range(sim.OUT_PT_DIM):
-                q_val = out["data_q88"][c]
-                f_val = out["data_float"][c]
-                print(
-                    f"      Ch[{c:02d}]: "
-                    f"Q8.8定点值 = {q_val:>5d} "
-                    f"(0x{q_val & 0xFFFF:04X})  ->  "
-                    f"还原浮点 = {f_val:.6f}"
-                )
+    main()

@@ -1,8 +1,8 @@
 # 比较硬件csv备份结果和最新结果的差异
 import csv
 
-file1 = "E:\\verilog\\pillarnest\\modelsim_pre\\ssimulation_result_backup.csv"
-file2 = "E:\\verilog\\pillarnest\\modelsim_pre\\ssimulation_result.csv"
+file1 = "E:\\verilog\\pillarnest\\modelsim_pointpillars2\\ssimulation_result.csv"
+file2 = "E:\\verilog\\pillarnest\\modelsim_pointpillars\\ssimulation_result.csv"
 
 def normalize_row(row):
     return [cell.strip() for cell in row]

@@ -278,7 +278,7 @@ def find_max_error_coordinates(sw_pseudo_img: np.ndarray, hw_pseudo_img: np.ndar
 
 if __name__ == "__main__":
 
-    hw_file = r"E:\verilog\pillarnest\modelsim_pointpillars\pfn_layer_out.csv"  
+    hw_file = r"E:\verilog\pillarnest\modelsim_pointpillars\pfn_layer_out_f1.csv"  
     sw_file = r"E:\mmdetection3d\bev_64d_nonzero.txt" 
 
     print("\n--- 读取软件特征 ---")

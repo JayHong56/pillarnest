@@ -8,8 +8,8 @@ module voxelize #(
     parameter integer BRAM_DATA_WIDTH = 640,  // 64bit * 8points
     parameter integer BRAM_ADDR_WIDTH = 9,  // HASH_VOXEL_NUMBER(256) * 4brams
     parameter integer BRAM_ADDR_WIDTH_PFE = 6,
-    parameter MEM_WEIGHT_FILE = "E:\\mmdetection3d\\my_output_parameters\\pfn_layer_fused_int_kitti\\mem\\pfn_weight.mem",
-    parameter MEM_BIAS_FILE = "E:\\mmdetection3d\\my_output_parameters\\pfn_layer_fused_int_kitti\\mem\\bias.mem"
+    parameter MEM_WEIGHT_FILE = "E:\\mmdetection3d\\my_output_parameters\\pfn_layer_fused_int_kitti_origin\\pfn_weight.mem",
+    parameter MEM_BIAS_FILE = "E:\\mmdetection3d\\my_output_parameters\\pfn_layer_fused_int_kitti_origin\\pfn_bias.mem"
 
 ) (
     input wire clk_p,
