@@ -29,16 +29,9 @@ module hash_expire_manager #(
     output reg [BUCKET_SLOT_WIDTH-1:0] b_we,
     output reg kill_valid,
     output wire kill_expired,
-    output wire bram_expire_clk_a,
-    // output wire                         bram_expire_rst_a,
-    // output wire                         bram_expire_wr_a,
-    // output reg  [BRAM_DATA_WIDTH/8-1:0] bram_expire_bwen_a,
     output wire [BRAM_ADDR_WIDTH-1:0] bram_expire_addr_a,
     input wire [BRAM_DATA_WIDTH-1:0] bram_expire_rdata_a,
-    output wire bram_expire_clk_b,
-    output wire bram_expire_rst_b,
     output reg bram_expire_wr_b,
-    output reg [BRAM_DATA_WIDTH/BYTE_WIDTH-1:0] bram_expire_bwen_b,
     output reg [BRAM_ADDR_WIDTH_PFE-1:0] bram_expire_addr_b,
     output reg [BRAM_DATA_WIDTH-1:0] bram_expire_wrdata_b,
     // ---- AXI-stream out (expired events) ----
@@ -48,10 +41,7 @@ module hash_expire_manager #(
     // fifo almost full -----backpressure
     output wire hash_stall
 );
-    assign bram_expire_clk_a = clk;
     // assign bram_expire_rst_a = ~rst_n;
-    assign bram_expire_clk_b = clk;
-    assign bram_expire_rst_b = ~rst_n;
     localparam ST_EMPTY = 2'b00;
     localparam ST_OCCU = 2'b01;
     localparam ST_TOMB = 2'b10;
@@ -131,6 +121,12 @@ module hash_expire_manager #(
             notify_wr_ptr <= {NOTIFY_AW{1'b0}};
             notify_rd_ptr <= {NOTIFY_AW{1'b0}};
             notify_count  <= {($clog2(NOTIFY_DEPTH + 1)) {1'b0}};
+
+        end else if (flush_done) begin
+            notify_wr_ptr <= {NOTIFY_AW{1'b0}};
+            notify_rd_ptr <= {NOTIFY_AW{1'b0}};
+            notify_count  <= {($clog2(NOTIFY_DEPTH + 1)) {1'b0}};
+
         end else begin
             if (notify_push && !notify_full) begin
                 notify_wr_ptr <= notify_wr_ptr + 1'b1;
@@ -163,15 +159,23 @@ module hash_expire_manager #(
 `endif
 
     // === 新增：FIFO 水位迟滞反压控制 (Hysteresis) ===
-    reg hash_stall_reg;
+    reg  hash_stall_reg;
+    wire expire_fifo_almost_full = (fifo_out_level >= (DEPTH / 2));
+    wire expired_fifo_empty = (fifo_out_level == 0);
+    wire task_almost_full;
+    wire task_almost_empty;
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             hash_stall_reg <= 1'b0;
+
+        end else if (flush_done) begin
+            hash_stall_reg <= 1'b0;
+
         end else begin
-            if (fifo_out_level >= (DEPTH / 2)) begin
+            if (expire_fifo_almost_full || task_almost_full) begin
                 // 高水位：到达一半深度，拉高 stall，通知上游停止喂 write_commit
                 hash_stall_reg <= 1'b1;
-            end else if (fifo_out_level == 0) begin
+            end else if (expired_fifo_empty && task_almost_empty) begin
                 // 低水位：必须等待下游完全抽干 FIFO，才降下 stall
                 hash_stall_reg <= 1'b0;
             end
@@ -211,12 +215,13 @@ module hash_expire_manager #(
             dq_count   <= {($clog2(DQ_DEPTH + 1)) {1'b0}};
             cand_valid <= 1'b0;
             cand_addr  <= {ADDR_WIDTH{1'b0}};
-        end else if (frame_end) begin
+        end else if (frame_end || flush_done) begin
             // 收到清空指令，直接复位指针
-            dq_wr_ptr  <= 0;
-            dq_rd_ptr  <= 0;
-            dq_count   <= 0;
+            dq_wr_ptr  <= {($clog2(DQ_DEPTH)) {1'b0}};
+            dq_rd_ptr  <= {($clog2(DQ_DEPTH)) {1'b0}};
+            dq_count   <= {($clog2(DQ_DEPTH + 1)) {1'b0}};
             cand_valid <= 1'b0;
+            cand_addr  <= {ADDR_WIDTH{1'b0}};
             // 注意：cand_addr 也可以选择复位，这里保持你原逻辑
         end else if (write_commit) begin
 
@@ -274,19 +279,39 @@ module hash_expire_manager #(
     wire [ADDR_WIDTH-1:0] eff_cand_addr = flush_run ? flush_cnt[ADDR_WIDTH-1:0] : cand_addr;
     // 流水线推进条件：正常的写提交脉冲 OR 正在执行强制扫描
     // wire pipe_advance = write_commit_delayed | flush_run;
-    wire pipe_advance = flush_run | cand_valid | s0_valid | s1_valid;
+    wire pipe_advance_raw = flush_run | cand_valid | s0_valid | s1_valid;
+    wire expire_block;
+    wire pipe_advance = pipe_advance_raw && !expire_block;
     // fifo pop bram 2-stage pipeline
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             a_addr_shadow   <= {BUCKET_AW{1'b0}};
+            a_we_shadow     <= {BUCKET_SLOT_WIDTH{1'b0}};
+
             s0_valid        <= 1'b0;
             s0_addr         <= {ADDR_WIDTH{1'b0}};
             s0_time         <= {TIMER_WIDTH{1'b0}};
+            s0_we           <= {BUCKET_SLOT_WIDTH{1'b0}};
+            s0_force_expire <= 1'b0;
+
             s1_valid        <= 1'b0;
             s1_addr         <= {ADDR_WIDTH{1'b0}};
             s1_time         <= {TIMER_WIDTH{1'b0}};
+            s1_force_expire <= 1'b0;
+
+        end else if (flush_done) begin
+            a_addr_shadow   <= {BUCKET_AW{1'b0}};
+            a_we_shadow     <= {BUCKET_SLOT_WIDTH{1'b0}};
+
+            s0_valid        <= 1'b0;
+            s0_addr         <= {ADDR_WIDTH{1'b0}};
+            s0_time         <= {TIMER_WIDTH{1'b0}};
             s0_we           <= {BUCKET_SLOT_WIDTH{1'b0}};
             s0_force_expire <= 1'b0;
+
+            s1_valid        <= 1'b0;
+            s1_addr         <= {ADDR_WIDTH{1'b0}};
+            s1_time         <= {TIMER_WIDTH{1'b0}};
             s1_force_expire <= 1'b0;
 
         end else if (pipe_advance) begin
@@ -387,10 +412,16 @@ module hash_expire_manager #(
 
     // 关键：task_pop 必须是组合信号，不能打一拍
     wire                           task_pop = task_accept;
-    wire                           task_push = expired && (!task_full || task_pop);
     // 空 FIFO 时禁止 pop
     wire                           task_pop_safe = task_pop && !task_empty;
 
+    wire                           task_can_push = !task_full || task_pop;
+    wire                           expire_accept = s1_valid && expired && task_can_push;
+    wire                           task_push = expire_accept;
+
+    assign expire_block = s1_valid && expired && !task_can_push;
+    assign task_almost_full = (task_count >= TASK_DEPTH - 3);
+    assign task_almost_empty = (task_count <= 3);
     // 独立 RAM 写入逻辑
     always @(posedge clk) begin
         if (task_push) begin
@@ -404,6 +435,12 @@ module hash_expire_manager #(
             task_wr_ptr <= {TASK_AW{1'b0}};
             task_rd_ptr <= {TASK_AW{1'b0}};
             task_count  <= {($clog2(TASK_DEPTH + 1)) {1'b0}};
+
+        end else if (flush_done) begin
+            task_wr_ptr <= {TASK_AW{1'b0}};
+            task_rd_ptr <= {TASK_AW{1'b0}};
+            task_count  <= {($clog2(TASK_DEPTH + 1)) {1'b0}};
+
         end else begin
             if (task_push) begin
                 task_wr_ptr <= task_wr_ptr + 1'b1;
@@ -428,21 +465,35 @@ module hash_expire_manager #(
     // -------------------------------------------------------------------------
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            copy_st              <= ST_IDLE;
+            copy_st           <= ST_IDLE;
 
-            fsm_read_en          <= 1'b0;
-            fsm_read_addr        <= {BRAM_ADDR_WIDTH{1'b0}};
-            fsm_write_addr       <= {BRAM_ADDR_WIDTH_PFE{1'b0}};
-            fsm_read_last        <= 1'b0;
-            fsm_notify_data      <= {EW{1'b0}};
+            fsm_read_en       <= 1'b0;
+            fsm_read_addr     <= {BRAM_ADDR_WIDTH{1'b0}};
+            fsm_write_addr    <= {BRAM_ADDR_WIDTH_PFE{1'b0}};
+            fsm_read_last     <= 1'b0;
 
-            fsm_task_addr        <= {ADDR_WIDTH{1'b0}};
-            fsm_task_base_ptr    <= {BRAM_ADDR_WIDTH_PFE{1'b0}};
-            fsm_task_notify_data <= {EW{1'b0}};
-            fsm_copy_rows        <= 2'd0;
-            fsm_next_row_idx     <= 2'd0;
+            fsm_task_addr     <= {ADDR_WIDTH{1'b0}};
+            fsm_task_base_ptr <= {BRAM_ADDR_WIDTH_PFE{1'b0}};
+            fsm_copy_rows     <= 2'd0;
+            fsm_next_row_idx  <= 2'd0;
 
-            task_base_ptr        <= {BRAM_ADDR_WIDTH_PFE{1'b0}};
+            task_base_ptr     <= {BRAM_ADDR_WIDTH_PFE{1'b0}};
+
+        end else if (flush_done) begin
+            copy_st           <= ST_IDLE;
+
+            fsm_read_en       <= 1'b0;
+            fsm_read_addr     <= {BRAM_ADDR_WIDTH{1'b0}};
+            fsm_write_addr    <= {BRAM_ADDR_WIDTH_PFE{1'b0}};
+            fsm_read_last     <= 1'b0;
+
+            fsm_task_addr     <= {ADDR_WIDTH{1'b0}};
+            fsm_task_base_ptr <= {BRAM_ADDR_WIDTH_PFE{1'b0}};
+            fsm_copy_rows     <= 2'd0;
+            fsm_next_row_idx  <= 2'd0;
+
+            task_base_ptr     <= {BRAM_ADDR_WIDTH_PFE{1'b0}};
+
 
         end else begin
             // 默认本周期不读
@@ -550,12 +601,18 @@ module hash_expire_manager #(
             fsm_read_en_d1       <= 1'b0;
             fsm_write_addr_d1    <= {BRAM_ADDR_WIDTH_PFE{1'b0}};
             fsm_read_last_d1     <= 1'b0;
-            fsm_notify_data_d1   <= {EW{1'b0}};
 
             bram_expire_wr_b     <= 1'b0;
             bram_expire_addr_b   <= {BRAM_ADDR_WIDTH_PFE{1'b0}};
-            bram_expire_bwen_b   <= {(BRAM_DATA_WIDTH / BYTE_WIDTH) {1'b0}};
-            bram_expire_wrdata_b <= {BRAM_DATA_WIDTH{1'b0}};
+
+        end else if (flush_done) begin
+            fsm_read_en_d1       <= 1'b0;
+            fsm_write_addr_d1    <= {BRAM_ADDR_WIDTH_PFE{1'b0}};
+            fsm_read_last_d1     <= 1'b0;
+
+            bram_expire_wr_b     <= 1'b0;
+            bram_expire_addr_b   <= {BRAM_ADDR_WIDTH_PFE{1'b0}};
+
         end else begin
             fsm_read_en_d1     <= fsm_read_en;
             fsm_write_addr_d1  <= fsm_write_addr;
@@ -566,10 +623,8 @@ module hash_expire_manager #(
                 bram_expire_wr_b     <= 1'b1;
                 bram_expire_addr_b   <= fsm_write_addr_d1;
                 bram_expire_wrdata_b <= bram_expire_rdata_a;
-                bram_expire_bwen_b   <= {(BRAM_DATA_WIDTH / BYTE_WIDTH) {1'b1}};
             end else begin
-                bram_expire_wr_b   <= 1'b0;
-                bram_expire_bwen_b <= {(BRAM_DATA_WIDTH / BYTE_WIDTH) {1'b0}};
+                bram_expire_wr_b <= 1'b0;
             end
         end
     end
@@ -590,9 +645,14 @@ module hash_expire_manager #(
             kill_valid <= 1'b0;
             b_we       <= {BUCKET_SLOT_WIDTH{1'b0}};
             b_addr     <= {BUCKET_AW{1'b0}};
-            b_wdata    <= {ENTRY_WIDTH{1'b0}};
+
+        end else if (flush_done) begin
+            kill_valid <= 1'b0;
+            b_we       <= {BUCKET_SLOT_WIDTH{1'b0}};
+            b_addr     <= {BUCKET_AW{1'b0}};
+
         end else begin
-            if (s1_valid && expired) begin  // 发现 expired 即刻击杀，写墓碑
+            if (expire_accept) begin  // task can_accept 的时候才处理expired事件
                 kill_valid <= 1'b1;
                 b_we       <= s1_addr[BUCKET_SLOT_WIDTH-1:0];
                 b_addr     <= s1_addr[ADDR_WIDTH-1-:BUCKET_AW];
@@ -632,16 +692,16 @@ module hash_expire_manager #(
             flush_cnt <= {(ADDR_WIDTH + 1) {1'b0}};
         end else begin
             if (frame_end && !flushing) begin
-                flushing  <= 1'b1;  // 收到帧末信号，启动清空
-                flush_cnt <= 0;
+                flushing  <= 1'b1;
+                flush_cnt <= {(ADDR_WIDTH + 1) {1'b0}};
             end else if (flushing) begin
                 if (flush_cnt < TABLE_SIZE) begin
-                    if (!hash_stall) begin
+                    if (!hash_stall && !expire_block) begin
                         flush_cnt <= flush_cnt + 1'b1;
                     end
                 end else if (all_drained) begin
-                    // 扫完地址后停留在 flushing 状态，直到数据通路完全排空
-                    flushing <= 1'b0;
+                    flushing  <= 1'b0;
+                    flush_cnt <= {(ADDR_WIDTH + 1) {1'b0}};
                 end
             end
         end

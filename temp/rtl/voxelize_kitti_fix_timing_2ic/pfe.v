@@ -1,3 +1,4 @@
+
 module pfe #(
     parameter COORD_WIDTH = 11,
     parameter PT_WIDTH = 16,
@@ -10,28 +11,26 @@ module pfe #(
     parameter integer BRAM_ADDR_WIDTH = 10,  // 256pillar * 2brams
     parameter integer BRAM_ADDR_WIDTH_PFE = 6
 ) (
-    input  wire                                                  clk,
-    input  wire                                                  rst_n,
-    input  wire                                                  s_axis_expire_tvalid,
-    output wire                                                  s_axis_expire_tready,
-    input  wire [2*COORD_WIDTH+BRAM_ADDR_WIDTH_PFE+VN_WIDTH-1:0] s_axis_expire_tdata,   // NOTE
+    input wire clk,
+    input wire rst_n,
+    input wire s_axis_expire_tvalid,
+    output wire s_axis_expire_tready,
+    input wire [2*COORD_WIDTH+BRAM_ADDR_WIDTH_PFE+VN_WIDTH-1:0] s_axis_expire_tdata,  // NOTE
     // pfe
-    output wire                                    bram_pfe_clk,
     // output wire                                       bram_pfe_rst,
-    output reg        [   BRAM_ADDR_WIDTH_PFE-1:0] bram_pfe_addr,           // 假设地址空间足够大
+    output reg [BRAM_ADDR_WIDTH_PFE-1:0] bram_pfe_addr,  // 假设地址空间足够大
     // output reg                                        bram_pfe_en,
-    input  wire       [       BRAM_DATA_WIDTH-1:0] bram_pfe_rdata,          // 72bit point: {x[19:0] Q8.12, y[19:0] Q8.12, z[15:0] Q4.12, intensity[15:0] Q1.15}
-    input  wire                                    m_axis_pfe_tready,
-    output reg                                     m_axis_pfe_valid,
-    output reg        [EXPAND_PT_DIM*PT_WIDTH-1:0] m_axis_pfe_data,         // 9*16 bits to PFN
-    output reg                                     m_axis_pfe_last,
-    output reg                                     m_axis_pfe_voxel_valid,
-    output reg signed [           COORD_WIDTH-1:0] m_axis_pfe_voxel_x,
-    output reg signed [           COORD_WIDTH-1:0] m_axis_pfe_voxel_y,
-    output wire                                    m_axis_pfe_flush_done,   // <--- 新增
-    input  wire                                    flush_done
+    input  wire       [                           BRAM_DATA_WIDTH-1:0] bram_pfe_rdata,          // 72bit point: {x[19:0] Q8.12, y[19:0] Q8.12, z[15:0] Q4.12, intensity[15:0] Q1.15}
+    input wire m_axis_pfe_tready,
+    output reg m_axis_pfe_valid,
+    output reg [EXPAND_PT_DIM*PT_WIDTH-1:0] m_axis_pfe_data,  // 9*16 bits to PFN
+    output reg m_axis_pfe_last,
+    output reg m_axis_pfe_voxel_valid,
+    output reg signed [COORD_WIDTH-1:0] m_axis_pfe_voxel_x,
+    output reg signed [COORD_WIDTH-1:0] m_axis_pfe_voxel_y,
+    output wire m_axis_pfe_flush_done,  // <--- 新增
+    input wire flush_done
 );
-    assign bram_pfe_clk = clk;
     // 注意：Verilog 切片最好用固定数值，或者确保 parameter 计算正确
     wire signed [COORD_WIDTH-1:0] axis_voxel_x = s_axis_expire_tdata[(2*COORD_WIDTH+BRAM_ADDR_WIDTH_PFE+VN_WIDTH-1)-:COORD_WIDTH];
     wire signed [COORD_WIDTH-1:0] axis_voxel_y = s_axis_expire_tdata[(COORD_WIDTH+BRAM_ADDR_WIDTH_PFE+VN_WIDTH-1)-:COORD_WIDTH];
@@ -51,7 +50,7 @@ module pfe #(
     // BRAM point format: {x_q812[19:0], y_q812[19:0], z_q412[15:0], intensity_q115[15:0]} = 72 bit.
     // PFN interface remains 9 * 16 bit. x/y derived features are converted to signed Q1.15.
     localparam integer PT_WIDTH_XY = 20;
-    localparam integer PT_WIDTH_Z  = 16;
+    localparam integer PT_WIDTH_Z = 16;
     localparam integer PT_WIDTH_IS = 16;
     localparam integer PT_WIDTH_I_XY = 8;
     localparam integer PT_WIDTH_F_XY = 12;
@@ -61,8 +60,9 @@ module pfe #(
     localparam integer PT_WIDTH_F_Z = 12;
     localparam integer PT_WIDTH_I_IS = 1;
     localparam integer PT_WIDTH_F_IS = 15;
+
     localparam integer SUM_XY_WIDTH = PT_WIDTH_XY + VN_WIDTH;
-    localparam integer SUM_Z_WIDTH  = PT_WIDTH_Z  + VN_WIDTH;
+    localparam integer SUM_Z_WIDTH = PT_WIDTH_Z + VN_WIDTH;
 
     function signed [PT_WIDTH-1:0] q812_to_q115_sat;
         input signed [PT_WIDTH_XY-1:0] val_q812;
@@ -85,7 +85,7 @@ module pfe #(
 
     // --------------------扩展voxel_center点坐标维度---------------------
     // voxel_x_fix16 = voxel_x * 0.16 - 0.0 + 0.08
-    localparam integer ST3_SCALE = 1+17;
+    localparam integer ST3_SCALE = 1 + 17;
     localparam signed [ST3_SCALE-1:0] COEFF_SLOPE = 18'sd10486;  // 0.16
     localparam signed [ST3_SCALE-1:0] COEFF_OFFSET_X = 18'sd5243;  // +0.08 (-0.000 + 0.08 offset) in Q16
     localparam signed [ST3_SCALE+$clog2(40)-1:0] COEFF_OFFSET_Y = 24'sd2595226;  // -39.60 (-39.68 + 0.08 offset) in Q16
@@ -93,19 +93,24 @@ module pfe #(
     // -----------------------------------------------------------
     // 源头安全反压控制 (In-flight tracking)
     // -----------------------------------------------------------
-    reg  [2:0] inflight_cnt;
-    wire       fire_in;
+    wire       pfe_frame_clear;  // 整个 PFE 内部的“软复位”，在每帧结束时由外部控制信号触发，清空所有 inflight voxel 的状态。
+    reg [2:0] inflight_cnt;
+    wire fire_in;
 
     // Stage2 完成一个 voxel，并成功写入 Stage3
-    wire       st2_to_st3;
+    wire st2_to_st3;
 
     // 统一的容量模型：
     // inflight_cnt  : Stage1/2 中已经接收、但还没落到 Stage3 的 voxel 数
     // 总容量 = VOX_FIFO_DEPTH + 2
-    wire       pipe_stall;
+    wire pipe_stall;
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             inflight_cnt <= 3'd0;
+
+        end else if (pfe_frame_clear) begin
+            inflight_cnt <= 3'd0;
+
         end else begin
             case ({
                 fire_in, st2_to_st3
@@ -117,46 +122,40 @@ module pfe #(
         end
     end
 
-
     // 常用循环变量
     integer k, i;
     // Stage 1: 地址生成流水线 (Address Generation)
     // 支持每个 voxel 读取 1/2/3 行。
-    reg                            more_row_pending;
-    reg  [                    1:0] next_row_idx;
-    reg  [                    1:0] st1_total_rows;
-    reg  [                    2:0] req_phase;
-    reg                            req_valid;
-    reg  [           VN_WIDTH-1:0] st1_point_num;
-    reg  [        COORD_WIDTH-1:0] st1_voxel_x;
-    reg  [        COORD_WIDTH-1:0] st1_voxel_y;
-    reg  [BRAM_ADDR_WIDTH_PFE-1:0] st1_bram_b_addr;
+    reg more_row_pending;
+    reg [1:0] next_row_idx;
+    reg [1:0] st1_total_rows;
+    reg [VN_WIDTH-1:0] st1_point_num;
+    reg [COORD_WIDTH-1:0] st1_voxel_x;
+    reg [COORD_WIDTH-1:0] st1_voxel_y;
+    reg [BRAM_ADDR_WIDTH_PFE-1:0] st1_bram_b_addr;
 
-    wire [1:0] axis_need_rows = (axis_point_num_indicator <= POINTS_PER_ROW_V)     ? 2'd1 :
-                                (axis_point_num_indicator <= TWO_POINTS_PER_ROW_V) ? 2'd2 :
-                                                                                     2'd3;
-    wire                           ready_to_accept = !more_row_pending && !pipe_stall;
+    wire [                    1:0] axis_need_rows = (axis_point_num_indicator <= POINTS_PER_ROW_V) ? 2'd1 : (axis_point_num_indicator <= TWO_POINTS_PER_ROW_V) ? 2'd2 : 2'd3;
+    wire ready_to_accept = !more_row_pending && !pipe_stall;
     assign s_axis_expire_tready = ready_to_accept;
     assign fire_in              = s_axis_expire_tvalid && ready_to_accept;
 
     // 当前周期是否发起 BRAM 读请求
-    wire                           issue_row0 = fire_in;
-    wire                           issue_more_row = more_row_pending;
-    wire                           issue_valid = issue_row0 || issue_more_row;
+    wire issue_row0 = fire_in;
+    wire issue_more_row = more_row_pending;
+    wire issue_valid = issue_row0 || issue_more_row;
 
     // 当前发起的是第几行：0/1/2
-    wire [1:0]                     issue_row_idx = issue_row0 ? 2'd0 : next_row_idx;
+    wire [1:0] issue_row_idx = issue_row0 ? 2'd0 : next_row_idx;
 
     // 当前读请求是不是该 voxel 的最后一行
-    wire                           issue_last = issue_row0 ? (axis_need_rows == 2'd1) :
-                                                            (next_row_idx == (st1_total_rows - 1'b1));
+    wire issue_last = issue_row0 ? (axis_need_rows == 2'd1) : (next_row_idx == (st1_total_rows - 1'b1));
 
     // 当前读请求对应的元数据
-    wire [           VN_WIDTH-1:0] issue_pnum = issue_row0 ? axis_point_num_indicator : st1_point_num;
-    wire [        COORD_WIDTH-1:0] issue_vx = issue_row0 ? axis_voxel_x : st1_voxel_x;
-    wire [        COORD_WIDTH-1:0] issue_vy = issue_row0 ? axis_voxel_y : st1_voxel_y;
+    wire [VN_WIDTH-1:0] issue_pnum = issue_row0 ? axis_point_num_indicator : st1_point_num;
+    wire [COORD_WIDTH-1:0] issue_vx = issue_row0 ? axis_voxel_x : st1_voxel_x;
+    wire [COORD_WIDTH-1:0] issue_vy = issue_row0 ? axis_voxel_y : st1_voxel_y;
     wire [BRAM_ADDR_WIDTH_PFE-1:0] issue_base_addr = issue_row0 ? axis_bram_index : st1_bram_b_addr;
-    wire [BRAM_ADDR_WIDTH_PFE-1:0] issue_addr = issue_base_addr + {{(BRAM_ADDR_WIDTH_PFE-2){1'b0}}, issue_row_idx};
+    wire [BRAM_ADDR_WIDTH_PFE-1:0] issue_addr = issue_base_addr + {{(BRAM_ADDR_WIDTH_PFE - 2) {1'b0}}, issue_row_idx};
     // ------------------------------------------------------------------------
     // 关键点：如果你真的要 BRAM read latency = 1 cycle，
     // bram_pfe_addr 最好不要在 posedge 里打一拍，
@@ -175,17 +174,19 @@ module pfe #(
             more_row_pending <= 1'b0;
             next_row_idx     <= 2'd0;
             st1_total_rows   <= 2'd0;
-            st1_point_num    <= {VN_WIDTH{1'b0}};
-            st1_voxel_x      <= {COORD_WIDTH{1'b0}};
-            st1_voxel_y      <= {COORD_WIDTH{1'b0}};
-            st1_bram_b_addr  <= {BRAM_ADDR_WIDTH_PFE{1'b0}};
+
+        end else if (pfe_frame_clear) begin
+            more_row_pending <= 1'b0;
+            next_row_idx     <= 2'd0;
+            st1_total_rows   <= 2'd0;
+
         end else begin
             if (fire_in) begin
-                st1_point_num    <= axis_point_num_indicator;
-                st1_voxel_x      <= axis_voxel_x;
-                st1_voxel_y      <= axis_voxel_y;
-                st1_bram_b_addr  <= axis_bram_index;
-                st1_total_rows   <= axis_need_rows;
+                st1_point_num   <= axis_point_num_indicator;
+                st1_voxel_x     <= axis_voxel_x;
+                st1_voxel_y     <= axis_voxel_y;
+                st1_bram_b_addr <= axis_bram_index;
+                st1_total_rows  <= axis_need_rows;
 
                 if (axis_need_rows == 2'd1) begin
                     more_row_pending <= 1'b0;
@@ -214,7 +215,7 @@ module pfe #(
     // ========================================================================
 
     reg                   rd_valid_d1;
-    reg [             1:0] rd_row_idx_d1;
+    reg [            1:0] rd_row_idx_d1;
     reg                   rd_last_d1;
     reg [   VN_WIDTH-1:0] rd_pnum_d1;
     reg [COORD_WIDTH-1:0] rd_vx_d1;
@@ -225,9 +226,12 @@ module pfe #(
             rd_valid_d1   <= 1'b0;
             rd_row_idx_d1 <= 2'd0;
             rd_last_d1    <= 1'b0;
-            rd_pnum_d1    <= {VN_WIDTH{1'b0}};
-            rd_vx_d1      <= {COORD_WIDTH{1'b0}};
-            rd_vy_d1      <= {COORD_WIDTH{1'b0}};
+
+        end else if (pfe_frame_clear) begin
+            rd_valid_d1   <= 1'b0;
+            rd_row_idx_d1 <= 2'd0;
+            rd_last_d1    <= 1'b0;
+
         end else begin
             rd_valid_d1   <= issue_valid;
             rd_row_idx_d1 <= issue_row_idx;
@@ -249,53 +253,47 @@ module pfe #(
     // point_num >  20 : 处理 row0 + row1 + row2，row2 结束后 st2_valid
     // ========================================================================
 
-    reg        [       PT_WIDTH_PER-1:0] st2_points_buffer                              [0:MAX_VOXEL_NUM-1];
+    reg        [PT_WIDTH_PER-1:0] st2_points_buffer                       [0:MAX_VOXEL_NUM-1];
 
     reg signed [SUM_XY_WIDTH-1:0] sum_x_acc;
     reg signed [SUM_XY_WIDTH-1:0] sum_y_acc;
-    reg signed [SUM_Z_WIDTH-1:0]  sum_z_acc;
+    reg signed [ SUM_Z_WIDTH-1:0] sum_z_acc;
 
-    wire                               st2_rd_valid = rd_valid_d1;
-    wire       [                  1:0] st2_row_idx = rd_row_idx_d1;
-    wire                               st2_last_row = rd_last_d1;
-    wire       [         VN_WIDTH-1:0] st2_pnum = rd_pnum_d1;
-    wire       [      COORD_WIDTH-1:0] st2_vx = rd_vx_d1;
-    wire       [      COORD_WIDTH-1:0] st2_vy = rd_vy_d1;
+    wire                          st2_rd_valid = rd_valid_d1;
+    wire       [             1:0] st2_row_idx = rd_row_idx_d1;
+    wire                          st2_last_row = rd_last_d1;
+    wire       [    VN_WIDTH-1:0] st2_pnum = rd_pnum_d1;
+    wire       [ COORD_WIDTH-1:0] st2_vx = rd_vx_d1;
+    wire       [ COORD_WIDTH-1:0] st2_vy = rd_vy_d1;
 
-    wire       [      VN_WIDTH-1:0] base_idx = st2_row_idx * POINTS_PER_ROW;
+    wire       [    VN_WIDTH-1:0] base_idx = st2_row_idx * POINTS_PER_ROW;
 
-    reg        [       PT_WIDTH_PER-1:0] st2_point_data;
+    reg        [PT_WIDTH_PER-1:0] st2_point_data;
 
     reg signed [SUM_XY_WIDTH-1:0] sum_x_step;
     reg signed [SUM_XY_WIDTH-1:0] sum_y_step;
-    reg signed [SUM_Z_WIDTH-1:0]  sum_z_step;
+    reg signed [ SUM_Z_WIDTH-1:0] sum_z_step;
 
 
     // Stage2 -> Stage3 的输出寄存器
-    reg                                st2_valid;
-    reg        [         VN_WIDTH-1:0] st2_done_pnum;
+    reg                           st2_valid;
+    reg        [    VN_WIDTH-1:0] st2_done_pnum;
     reg signed [SUM_XY_WIDTH-1:0] st2_done_sum_x;
     reg signed [SUM_XY_WIDTH-1:0] st2_done_sum_y;
-    reg signed [SUM_Z_WIDTH-1:0]  st2_done_sum_z;
-    reg signed [      COORD_WIDTH-1:0] st2_done_vx;
-    reg signed [      COORD_WIDTH-1:0] st2_done_vy;
+    reg signed [ SUM_Z_WIDTH-1:0] st2_done_sum_z;
+    reg signed [ COORD_WIDTH-1:0] st2_done_vx;
+    reg signed [ COORD_WIDTH-1:0] st2_done_vy;
 
 
     // 注意：st2_to_st3 在后面定义。
     // 如果 Stage3 接收了当前 st2_valid，则清掉 st2_valid。
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            sum_x_acc      <= {SUM_XY_WIDTH{1'b0}};
-            sum_y_acc      <= {SUM_XY_WIDTH{1'b0}};
-            sum_z_acc      <= {SUM_Z_WIDTH{1'b0}};
-
             st2_valid      <= 1'b0;
-            st2_done_pnum  <= {VN_WIDTH{1'b0}};
-            st2_done_sum_x <= {SUM_XY_WIDTH{1'b0}};
-            st2_done_sum_y <= {SUM_XY_WIDTH{1'b0}};
-            st2_done_sum_z <= {SUM_Z_WIDTH{1'b0}};
-            st2_done_vx    <= {COORD_WIDTH{1'b0}};
-            st2_done_vy    <= {COORD_WIDTH{1'b0}};
+
+        end else if (pfe_frame_clear) begin
+            st2_valid      <= 1'b0;
+
         end else begin
             if (st2_to_st3) begin
                 st2_valid <= 1'b0;
@@ -376,7 +374,7 @@ module pfe #(
     reg [VN_WIDTH-1:0] st3_pnum;
     reg [PT_WIDTH_PER-1:0] st3_points_buffer[0:MAX_VOXEL_NUM-1];
     reg signed [SUM_XY_WIDTH-1:0] st3_sum_x, st3_sum_y;
-    reg signed [SUM_Z_WIDTH-1:0]  st3_sum_z;
+    reg signed [SUM_Z_WIDTH-1:0] st3_sum_z;
     reg signed [COORD_WIDTH-1:0] st3_vx, st3_vy;
 
     always @(posedge clk or negedge rst_n) begin
@@ -436,14 +434,14 @@ module pfe #(
     wire signed [SUM_XY_WIDTH+ST3_SCALE-1:0] temp_mult_x;
     wire signed [SUM_XY_WIDTH+ST3_SCALE-1:0] temp_mult_y;
     wire signed [SUM_Z_WIDTH +ST3_SCALE-1:0] temp_mult_z;
-    wire signed [        COORD_WIDTH+ST3_SCALE -1:0] temp_mult_voxel_x;
-    wire signed [        COORD_WIDTH+ST3_SCALE -1:0] temp_mult_voxel_y;
-    wire signed [        COORD_WIDTH+ST3_SCALE -1:0] temp_sub_voxel_x;
-    wire signed [        COORD_WIDTH+ST3_SCALE -1:0] temp_sub_voxel_y;
+    wire signed [COORD_WIDTH+ST3_SCALE -1:0] temp_mult_voxel_x;
+    wire signed [COORD_WIDTH+ST3_SCALE -1:0] temp_mult_voxel_y;
+    wire signed [COORD_WIDTH+ST3_SCALE -1:0] temp_sub_voxel_x;
+    wire signed [COORD_WIDTH+ST3_SCALE -1:0] temp_sub_voxel_y;
 
-    wire signed [PT_WIDTH_XY-1:0] meanx_center_q812;
-    wire signed [PT_WIDTH_XY-1:0] meany_center_q812;
-    wire signed [PT_WIDTH_Z-1:0] meanz_center_q412;
+    wire signed [           PT_WIDTH_XY-1:0] meanx_center_q812;
+    wire signed [           PT_WIDTH_XY-1:0] meany_center_q812;
+    wire signed [            PT_WIDTH_Z-1:0] meanz_center_q412;
 
     assign meanx_center_q812 = temp_mult_x[16-PT_WIDTH_F_XY+PT_WIDTH_XY-1:16-PT_WIDTH_F_XY];
     assign meany_center_q812 = temp_mult_y[16-PT_WIDTH_F_XY+PT_WIDTH_XY-1:16-PT_WIDTH_F_XY];
@@ -455,7 +453,7 @@ module pfe #(
         .WIFA (PT_WIDTH_F_XY),
         .WIIB (ST3_SCALE),
         .WIFB (0),
-        .WOI  (SUM_XY_WIDTH+ST3_SCALE),
+        .WOI  (SUM_XY_WIDTH + ST3_SCALE),
         .WOF  (0),
         .ROUND(1)
     ) fxp_mul_x (
@@ -469,7 +467,7 @@ module pfe #(
         .WIFA (PT_WIDTH_F_XY),
         .WIIB (ST3_SCALE),
         .WIFB (0),
-        .WOI  (SUM_XY_WIDTH+ST3_SCALE),
+        .WOI  (SUM_XY_WIDTH + ST3_SCALE),
         .WOF  (0),
         .ROUND(1)
     ) fxp_mul_y (
@@ -483,7 +481,7 @@ module pfe #(
         .WIFA (PT_WIDTH_F_Z),
         .WIIB (ST3_SCALE),
         .WIFB (0),
-        .WOI  (SUM_Z_WIDTH+ST3_SCALE),
+        .WOI  (SUM_Z_WIDTH + ST3_SCALE),
         .WOF  (0),
         .ROUND(1)
     ) fxp_mul_z (
@@ -508,21 +506,9 @@ module pfe #(
     wire signed [COORD_WIDTH+ST3_SCALE-1:0] temp_mult_voxel_x_fast;
     wire signed [COORD_WIDTH+ST3_SCALE-1:0] temp_mult_voxel_y_fast;
 
-    assign temp_mult_voxel_x_fast =
-        (st3_vx_ext <<< 13)
-        + (st3_vx_ext <<< 11)
-        + (st3_vx_ext <<<  8)
-        - (st3_vx_ext <<<  4)
-        + (st3_vx_ext <<<  2)
-        + (st3_vx_ext <<<  1);
+    assign temp_mult_voxel_x_fast = (st3_vx_ext <<< 13) + (st3_vx_ext <<< 11) + (st3_vx_ext <<< 8) - (st3_vx_ext <<< 4) + (st3_vx_ext <<< 2) + (st3_vx_ext <<< 1);
 
-    assign temp_mult_voxel_y_fast =
-        (st3_vy_ext <<< 13)
-        + (st3_vy_ext <<< 11)
-        + (st3_vy_ext <<<  8)
-        - (st3_vy_ext <<<  4)
-        + (st3_vy_ext <<<  2)
-        + (st3_vy_ext <<<  1);
+    assign temp_mult_voxel_y_fast = (st3_vy_ext <<< 13) + (st3_vy_ext <<< 11) + (st3_vy_ext <<< 8) - (st3_vy_ext <<< 4) + (st3_vy_ext <<< 2) + (st3_vy_ext <<< 1);
 
     assign temp_sub_voxel_x = temp_mult_voxel_x_fast + COEFF_OFFSET_X;
     assign temp_sub_voxel_y = temp_mult_voxel_y_fast - COEFF_OFFSET_Y;
@@ -536,14 +522,18 @@ module pfe #(
     reg [VN_WIDTH-1:0] st4_pnum;
     reg [PT_WIDTH_PER-1:0] st4_points_buffer[0:MAX_VOXEL_NUM-1];
     reg signed [PT_WIDTH_XY-1:0] st4_mean_x, st4_mean_y;
-    reg signed [PT_WIDTH_Z-1:0]  st4_mean_z;
+    reg signed [PT_WIDTH_Z-1:0] st4_mean_z;
     reg signed [PT_WIDTH_XY-1:0] st4_vx_fixxy, st4_vy_fixxy;
     reg signed [COORD_WIDTH-1:0] st4_voxel_x, st4_voxel_y;
 
     // Stage4 -> FIFO：只有 FIFO 不满才能 push
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            st4_valid <= 1'b0;
+            st4_valid    <= 1'b0;
+
+        end else if (pfe_frame_clear) begin
+            st4_valid    <= 1'b0;
+
         end else begin
             // 本拍 Stage3 -> Stage4
             if (st3_to_st4) begin
@@ -582,9 +572,9 @@ module pfe #(
     // store7 = {x_vcenter, y_vcenter, z, intensity, x_cluster, y_cluster, z_cluster}
     // out9   = {x_vcenter, y_vcenter, z, intensity, x_cluster, y_cluster, z_cluster, x_vcenter, y_vcenter}
     localparam PFE_FIFO_DIM = 7;
-    localparam PT_VEC_FIFO_W = PFE_FIFO_DIM * PT_WIDTH;       // 7 * 16 = 112 bits
-    localparam PT_VEC_W      = EXPAND_PT_DIM * PT_WIDTH;      // 9 * 16 = 144 bits, PFN interface
-    localparam VOX_VEC_W     = MAX_VOXEL_NUM * PT_VEC_FIFO_W; // 20 * 112 = 2240 bits
+    localparam PT_VEC_FIFO_W = PFE_FIFO_DIM * PT_WIDTH;  // 7 * 16 = 112 bits
+    localparam PT_VEC_W = EXPAND_PT_DIM * PT_WIDTH;  // 9 * 16 = 144 bits, PFN interface
+    localparam VOX_VEC_W = MAX_VOXEL_NUM * PT_VEC_FIFO_W;  // 20 * 112 = 2240 bits
 
     function [PT_VEC_W-1:0] expand7_to_9;
         input [PT_VEC_FIFO_W-1:0] in7;
@@ -596,15 +586,16 @@ module pfe #(
         reg [PT_WIDTH-1:0] y_cluster;
         reg [PT_WIDTH-1:0] z_cluster;
         begin
-            x_vcenter    = in7[PT_VEC_FIFO_W-1-0*PT_WIDTH -: PT_WIDTH];
-            y_vcenter    = in7[PT_VEC_FIFO_W-1-1*PT_WIDTH -: PT_WIDTH];
-            z_raw        = in7[PT_VEC_FIFO_W-1-2*PT_WIDTH -: PT_WIDTH];
-            intensity_raw= in7[PT_VEC_FIFO_W-1-3*PT_WIDTH -: PT_WIDTH];
-            x_cluster    = in7[PT_VEC_FIFO_W-1-4*PT_WIDTH -: PT_WIDTH];
-            y_cluster    = in7[PT_VEC_FIFO_W-1-5*PT_WIDTH -: PT_WIDTH];
-            z_cluster    = in7[PT_VEC_FIFO_W-1-6*PT_WIDTH -: PT_WIDTH];
-            expand7_to_9 = {x_vcenter, y_vcenter, z_raw, intensity_raw,
-                            x_cluster, y_cluster, z_cluster, x_vcenter, y_vcenter};
+            x_vcenter = in7[PT_VEC_FIFO_W-1-0*PT_WIDTH-:PT_WIDTH];
+            y_vcenter = in7[PT_VEC_FIFO_W-1-1*PT_WIDTH-:PT_WIDTH];
+            z_raw = in7[PT_VEC_FIFO_W-1-2*PT_WIDTH-:PT_WIDTH];
+            intensity_raw = in7[PT_VEC_FIFO_W-1-3*PT_WIDTH-:PT_WIDTH];
+            x_cluster = in7[PT_VEC_FIFO_W-1-4*PT_WIDTH-:PT_WIDTH];
+            y_cluster = in7[PT_VEC_FIFO_W-1-5*PT_WIDTH-:PT_WIDTH];
+            z_cluster = in7[PT_VEC_FIFO_W-1-6*PT_WIDTH-:PT_WIDTH];
+            expand7_to_9 = {
+                x_vcenter, y_vcenter, z_raw, intensity_raw, x_cluster, y_cluster, z_cluster, x_vcenter, y_vcenter
+            };
         end
     endfunction
 
@@ -635,22 +626,22 @@ module pfe #(
 
 
     // 每个点预计算差值：x/y 内部 Q8.12，送 PFN 前转成 Q1.15。
-    wire signed [PT_WIDTH_XY-1:0] sub_x_mean_q812       [0:MAX_VOXEL_NUM-1];
-    wire signed [PT_WIDTH_XY-1:0] sub_y_mean_q812       [0:MAX_VOXEL_NUM-1];
-    wire signed [PT_WIDTH_XY-1:0] sub_x_vcenter_q812    [0:MAX_VOXEL_NUM-1];
-    wire signed [PT_WIDTH_XY-1:0] sub_y_vcenter_q812    [0:MAX_VOXEL_NUM-1];
+    wire signed [PT_WIDTH_XY-1:0] sub_x_mean_q812   [0:MAX_VOXEL_NUM-1];
+    wire signed [PT_WIDTH_XY-1:0] sub_y_mean_q812   [0:MAX_VOXEL_NUM-1];
+    wire signed [PT_WIDTH_XY-1:0] sub_x_vcenter_q812[0:MAX_VOXEL_NUM-1];
+    wire signed [PT_WIDTH_XY-1:0] sub_y_vcenter_q812[0:MAX_VOXEL_NUM-1];
 
-    wire [PT_WIDTH-1:0] sub_x_mean       [0:MAX_VOXEL_NUM-1];  // Q1.15
-    wire [PT_WIDTH-1:0] sub_y_mean       [0:MAX_VOXEL_NUM-1];  // Q1.15
-    wire [PT_WIDTH-1:0] sub_z_mean       [0:MAX_VOXEL_NUM-1];  // Q4.12
-    wire [PT_WIDTH-1:0] sub_x_vcenter    [0:MAX_VOXEL_NUM-1];  // Q1.15
-    wire [PT_WIDTH-1:0] sub_y_vcenter    [0:MAX_VOXEL_NUM-1];  // Q1.15
+    wire        [   PT_WIDTH-1:0] sub_x_mean        [0:MAX_VOXEL_NUM-1];  // Q1.15
+    wire        [   PT_WIDTH-1:0] sub_y_mean        [0:MAX_VOXEL_NUM-1];  // Q1.15
+    wire        [   PT_WIDTH-1:0] sub_z_mean        [0:MAX_VOXEL_NUM-1];  // Q4.12
+    wire        [   PT_WIDTH-1:0] sub_x_vcenter     [0:MAX_VOXEL_NUM-1];  // Q1.15
+    wire        [   PT_WIDTH-1:0] sub_y_vcenter     [0:MAX_VOXEL_NUM-1];  // Q1.15
 
-    wire                sub_x_mean_ovf   [0:MAX_VOXEL_NUM-1];
-    wire                sub_y_mean_ovf   [0:MAX_VOXEL_NUM-1];
-    wire                sub_z_mean_ovf   [0:MAX_VOXEL_NUM-1];
-    wire                sub_x_vcenter_ovf[0:MAX_VOXEL_NUM-1];
-    wire                sub_y_vcenter_ovf[0:MAX_VOXEL_NUM-1];
+    wire                          sub_x_mean_ovf    [0:MAX_VOXEL_NUM-1];
+    wire                          sub_y_mean_ovf    [0:MAX_VOXEL_NUM-1];
+    wire                          sub_z_mean_ovf    [0:MAX_VOXEL_NUM-1];
+    wire                          sub_x_vcenter_ovf [0:MAX_VOXEL_NUM-1];
+    wire                          sub_y_vcenter_ovf [0:MAX_VOXEL_NUM-1];
 
     genvar gi;
     generate
@@ -781,6 +772,12 @@ module pfe #(
             fifo_wr_ptr <= {VOX_FIFO_AW{1'b0}};
             fifo_rd_ptr <= {VOX_FIFO_AW{1'b0}};
             fifo_count  <= {(VOX_FIFO_AW + 1) {1'b0}};
+
+        end else if (pfe_frame_clear) begin
+            fifo_wr_ptr <= {VOX_FIFO_AW{1'b0}};
+            fifo_rd_ptr <= {VOX_FIFO_AW{1'b0}};
+            fifo_count  <= {(VOX_FIFO_AW + 1) {1'b0}};
+
         end else begin
             case ({
                 st4_push, voxel_pop
@@ -807,7 +804,7 @@ module pfe #(
     reg [VN_WIDTH-1:0] point_cnt;
     // 【核心新增 1】判断当前是否允许数据推进一步
     // 逻辑：如果当前没有发出有效数据（!valid），或者下游发来了 ready（可以接收），状态机才往前走
-    wire out_advance = (!m_axis_pfe_valid || m_axis_pfe_tready); // 当发中间点且下一个点不是最后一个点时，
+    wire out_advance = (!m_axis_pfe_valid || m_axis_pfe_tready);  // 当发中间点且下一个点不是最后一个点时，
 
     // 【核心改造 6】将当前要读取的 2240-bit 宽字整条拉出，做组合逻辑切片
     wire [VOX_VEC_W-1:0] rd_voxel_data = ep_fifo_data[fifo_rd_ptr];
@@ -858,18 +855,6 @@ module pfe #(
     //     - (cur_last_fire ? {{VOX_FIFO_AW{1'b0}},1'b1} : {(VOX_FIFO_AW+1){1'b0}});
 
     wire       [   VN_WIDTH-1:0] next_point_cnt = point_cnt + 1'b1;
-    reg signed [COORD_WIDTH-1:0] voxel_x_test;
-    reg signed [COORD_WIDTH-1:0] voxel_y_test;
-
-    always @(posedge clk or negedge rst_n) begin
-        if (!rst_n) begin
-            voxel_x_test <= {COORD_WIDTH{1'b0}};
-            voxel_y_test <= {COORD_WIDTH{1'b0}};
-        end else begin
-            voxel_x_test <= ep_fifo_voxel_x[fifo_rd_ptr];
-            voxel_y_test <= ep_fifo_voxel_y[fifo_rd_ptr];
-        end
-    end
 
 `ifndef SYNTHESIS
     initial begin
@@ -877,98 +862,75 @@ module pfe #(
     end
 `endif
 
-always @(posedge clk or negedge rst_n) begin
-    if (!rst_n) begin
-        point_cnt              <= {VN_WIDTH{1'b0}};
-        m_axis_pfe_valid       <= 1'b0;
-        m_axis_pfe_last        <= 1'b0;
-        m_axis_pfe_voxel_valid <= 1'b0;
-        m_axis_pfe_voxel_x     <= {COORD_WIDTH{1'b0}};
-        m_axis_pfe_voxel_y     <= {COORD_WIDTH{1'b0}};
-        m_axis_pfe_data        <= {EXPAND_PT_DIM * PT_WIDTH{1'b0}};
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            point_cnt              <= {VN_WIDTH{1'b0}};
+            m_axis_pfe_valid       <= 1'b0;
+            m_axis_pfe_last        <= 1'b0;
+            m_axis_pfe_voxel_valid <= 1'b0;
 
-    end else if (out_advance) begin
+        end else if (pfe_frame_clear) begin
+            point_cnt              <= {VN_WIDTH{1'b0}};
+            m_axis_pfe_valid       <= 1'b0;
+            m_axis_pfe_last        <= 1'b0;
+            m_axis_pfe_voxel_valid <= 1'b0;
 
-        // 默认情况下 voxel_valid 拉低；
-        // 只有当前输出的是某 voxel 最后一个点时才拉高。
-        m_axis_pfe_voxel_valid <= 1'b0;
+        end else if (out_advance) begin
 
-        // ================================================================
-        // 情况 A：
-        // 当前正在输出，并且当前点是该 voxel 最后一个点。
-        //
-        // 如果这个 last 点被下游接收，则当前 voxel pop。
-        // 此时：
-        //   - 如果后面还有下一个 voxel，下一拍直接输出下一个 voxel 的 point0
-        //   - 如果后面没有，则 valid 拉低
-        // ================================================================
-        if (m_axis_pfe_valid && m_axis_pfe_last) begin
+            // 默认情况下 voxel_valid 拉低；
+            // 只有当前输出的是某 voxel 最后一个点时才拉高。
+            m_axis_pfe_voxel_valid <= 1'b0;
 
-            if (has_next_after_pop) begin
-                // 直接切到下一个 voxel 的 point0，不插入 bubble
-                m_axis_pfe_valid   <= 1'b1;
-                m_axis_pfe_data    <= expand7_to_9(next_voxel_data[0+:PT_VEC_FIFO_W]);
-                point_cnt          <= {VN_WIDTH{1'b0}};
+            // ================================================================
+            // 情况 A：
+            // 当前正在输出，并且当前点是该 voxel 最后一个点。
+            //
+            // 如果这个 last 点被下游接收，则当前 voxel pop。
+            // 此时：
+            //   - 如果后面还有下一个 voxel，下一拍直接输出下一个 voxel 的 point0
+            //   - 如果后面没有，则 valid 拉低
+            // ================================================================
+            if (m_axis_pfe_valid && m_axis_pfe_last) begin
 
-                m_axis_pfe_voxel_x <= next_voxel_x;
-                m_axis_pfe_voxel_y <= next_voxel_y;
+                if (has_next_after_pop) begin
+                    // 直接切到下一个 voxel 的 point0，不插入 bubble
+                    m_axis_pfe_valid   <= 1'b1;
+                    m_axis_pfe_data    <= expand7_to_9(next_voxel_data[0+:PT_VEC_FIFO_W]);
+                    point_cnt          <= {VN_WIDTH{1'b0}};
 
-                if (next_voxel_pnum == {{(VN_WIDTH-1){1'b0}}, 1'b1}) begin
-                    // 下一个 voxel 只有 1 个点，point0 同时也是 last
-                    m_axis_pfe_last        <= 1'b1;
-                    m_axis_pfe_voxel_valid <= 1'b1;
+                    m_axis_pfe_voxel_x <= next_voxel_x;
+                    m_axis_pfe_voxel_y <= next_voxel_y;
+
+                    if (next_voxel_pnum == {{(VN_WIDTH - 1) {1'b0}}, 1'b1}) begin
+                        // 下一个 voxel 只有 1 个点，point0 同时也是 last
+                        m_axis_pfe_last        <= 1'b1;
+                        m_axis_pfe_voxel_valid <= 1'b1;
+                    end else begin
+                        m_axis_pfe_last        <= 1'b0;
+                        m_axis_pfe_voxel_valid <= 1'b0;
+                    end
+
                 end else begin
+                    // 没有下一个 voxel，才真正空闲
+                    m_axis_pfe_valid       <= 1'b0;
                     m_axis_pfe_last        <= 1'b0;
                     m_axis_pfe_voxel_valid <= 1'b0;
                 end
 
-            end else begin
-                // 没有下一个 voxel，才真正空闲
-                m_axis_pfe_valid       <= 1'b0;
-                m_axis_pfe_last        <= 1'b0;
-                m_axis_pfe_voxel_valid <= 1'b0;
-            end
+                // ================================================================
+                // 情况 B：
+                // 当前正在输出一个 voxel 的中间点。
+                // 下游 ready 后，切换到下一个点。
+                // ================================================================
 
-        end
-
-        // ================================================================
-        // 情况 B：
-        // 当前正在输出一个 voxel 的中间点。
-        // 下游 ready 后，切换到下一个点。
-        // ================================================================
-        else if (m_axis_pfe_valid) begin
-            point_cnt       <= next_point_cnt;
-            m_axis_pfe_data <= expand7_to_9(rd_voxel_data[next_point_cnt*PT_VEC_FIFO_W+:PT_VEC_FIFO_W]);
-
-            m_axis_pfe_voxel_x <= ep_fifo_voxel_x[fifo_rd_ptr];
-            m_axis_pfe_voxel_y <= ep_fifo_voxel_y[fifo_rd_ptr];
-
-            if (next_point_cnt == (cur_head_pnum - {{(VN_WIDTH-1){1'b0}}, 1'b1})) begin
-                m_axis_pfe_last        <= 1'b1;
-                m_axis_pfe_voxel_valid <= 1'b1;
-            end else begin
-                m_axis_pfe_last        <= 1'b0;
-                m_axis_pfe_voxel_valid <= 1'b0;
-            end
-        end
-
-        // ================================================================
-        // 情况 C：
-        // 当前输出空闲。
-        //
-        // 如果 FIFO 里有 voxel，则启动输出。
-        // 如果 FIFO 为空但 Stage4 本拍正好 push，也可以 bypass 直接启动输出。
-        // ================================================================
-        else begin
-            if (!fifo_empty) begin
-                m_axis_pfe_valid   <= 1'b1;
-                m_axis_pfe_data    <= expand7_to_9(rd_voxel_data[0+:PT_VEC_FIFO_W]);
-                point_cnt          <= {VN_WIDTH{1'b0}};
+            end else if (m_axis_pfe_valid) begin
+                point_cnt          <= next_point_cnt;
+                m_axis_pfe_data    <= expand7_to_9(rd_voxel_data[next_point_cnt*PT_VEC_FIFO_W+:PT_VEC_FIFO_W]);
 
                 m_axis_pfe_voxel_x <= ep_fifo_voxel_x[fifo_rd_ptr];
                 m_axis_pfe_voxel_y <= ep_fifo_voxel_y[fifo_rd_ptr];
 
-                if (cur_head_pnum == {{(VN_WIDTH-1){1'b0}}, 1'b1}) begin
+                if (next_point_cnt == (cur_head_pnum - {{(VN_WIDTH - 1) {1'b0}}, 1'b1})) begin
                     m_axis_pfe_last        <= 1'b1;
                     m_axis_pfe_voxel_valid <= 1'b1;
                 end else begin
@@ -976,32 +938,57 @@ always @(posedge clk or negedge rst_n) begin
                     m_axis_pfe_voxel_valid <= 1'b0;
                 end
 
-            end else if (st4_push) begin
-                // FIFO 原本为空，但本拍 Stage4 正好推入一个新 voxel。
-                // 这里直接 bypass 输出它的 point0。
-                m_axis_pfe_valid   <= 1'b1;
-                m_axis_pfe_data    <= expand7_to_9(pack_st4_voxel[0+:PT_VEC_FIFO_W]);
-                point_cnt          <= {VN_WIDTH{1'b0}};
-
-                m_axis_pfe_voxel_x <= st4_voxel_x;
-                m_axis_pfe_voxel_y <= st4_voxel_y;
-
-                if (st4_pnum == {{(VN_WIDTH-1){1'b0}}, 1'b1}) begin
-                    m_axis_pfe_last        <= 1'b1;
-                    m_axis_pfe_voxel_valid <= 1'b1;
-                end else begin
-                    m_axis_pfe_last        <= 1'b0;
-                    m_axis_pfe_voxel_valid <= 1'b0;
-                end
+                // ================================================================
+                // 情况 C：
+                // 当前输出空闲。
+                //
+                // 如果 FIFO 里有 voxel，则启动输出。
+                // 如果 FIFO 为空但 Stage4 本拍正好 push，也可以 bypass 直接启动输出。
+                // ================================================================
 
             end else begin
-                m_axis_pfe_valid       <= 1'b0;
-                m_axis_pfe_last        <= 1'b0;
-                m_axis_pfe_voxel_valid <= 1'b0;
+                if (!fifo_empty) begin
+                    m_axis_pfe_valid   <= 1'b1;
+                    m_axis_pfe_data    <= expand7_to_9(rd_voxel_data[0+:PT_VEC_FIFO_W]);
+                    point_cnt          <= {VN_WIDTH{1'b0}};
+
+                    m_axis_pfe_voxel_x <= ep_fifo_voxel_x[fifo_rd_ptr];
+                    m_axis_pfe_voxel_y <= ep_fifo_voxel_y[fifo_rd_ptr];
+
+                    if (cur_head_pnum == {{(VN_WIDTH - 1) {1'b0}}, 1'b1}) begin
+                        m_axis_pfe_last        <= 1'b1;
+                        m_axis_pfe_voxel_valid <= 1'b1;
+                    end else begin
+                        m_axis_pfe_last        <= 1'b0;
+                        m_axis_pfe_voxel_valid <= 1'b0;
+                    end
+
+                end else if (st4_push) begin
+                    // FIFO 原本为空，但本拍 Stage4 正好推入一个新 voxel。
+                    // 这里直接 bypass 输出它的 point0。
+                    m_axis_pfe_valid   <= 1'b1;
+                    m_axis_pfe_data    <= expand7_to_9(pack_st4_voxel[0+:PT_VEC_FIFO_W]);
+                    point_cnt          <= {VN_WIDTH{1'b0}};
+
+                    m_axis_pfe_voxel_x <= st4_voxel_x;
+                    m_axis_pfe_voxel_y <= st4_voxel_y;
+
+                    if (st4_pnum == {{(VN_WIDTH - 1) {1'b0}}, 1'b1}) begin
+                        m_axis_pfe_last        <= 1'b1;
+                        m_axis_pfe_voxel_valid <= 1'b1;
+                    end else begin
+                        m_axis_pfe_last        <= 1'b0;
+                        m_axis_pfe_voxel_valid <= 1'b0;
+                    end
+
+                end else begin
+                    m_axis_pfe_valid       <= 1'b0;
+                    m_axis_pfe_last        <= 1'b0;
+                    m_axis_pfe_voxel_valid <= 1'b0;
+                end
             end
         end
     end
-end
 
     // =========================================================================
     // 帧尾排空信号传递 (Flush Propagation)
@@ -1037,16 +1024,15 @@ end
     end
 
     assign m_axis_pfe_flush_done = m_axis_pfe_flush_done_reg;
-
-
+    assign pfe_frame_clear = m_axis_pfe_flush_done_reg;
 
 `ifndef SYNTHESIS
-    wire test_pfe = (issue_vx == 11'd60 && issue_vy == 11'd116) ? 1'b1 : 1'b0;
+    wire                       test_pfe = (issue_vx == 11'd60 && issue_vy == 11'd116) ? 1'b1 : 1'b0;
     // ====================================================================
     // 【独立的仿真测试模块】 抓取并打印特定 Voxel 数据
     // ====================================================================
     // synthesis translate_off
-    integer        test_k;
+    integer                    test_k;
     reg     [PT_WIDTH_PER-1:0] test_point_data;
 
     always @(posedge clk) begin

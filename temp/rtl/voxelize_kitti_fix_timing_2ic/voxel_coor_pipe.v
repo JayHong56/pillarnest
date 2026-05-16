@@ -25,30 +25,24 @@ module voxel_coor_pipe #(
     input wire frame_end,  // 外部传入：当前帧点云结束脉冲 (1-cycle pulse)
     output wire flush_done,  // 输出：哈希表剩余有效点已全部输出完毕
     output wire hash_stall,
-    // AXI-Stream in (from DRAM FIFO)
+    // AXI-Stream in (from DRAM FIFO), 128-bit: {x_float32, y_float32, z_float32, intensity_float32}
     input wire [DRAM_DATA_WIDTH-1:0] s_axis_dram_data,
     input wire [DRAM_DATA_WIDTH/8-1:0] s_axis_dram_keep,
     input wire s_axis_dram_last,
     input wire s_axis_dram_valid,
     output wire s_axis_dram_ready,
     // BRAM Native Interface
-    output wire bram_voxelpoint_clk,
-    output wire bram_voxelpoint_rst,
     output reg bram_voxelpoint_wr,
-    output reg [BRAM_DATA_WIDTH/BYTE_WIDTH-1:0] bram_voxelpoint_bwen,  // 32-bit Byte Enable
-    output reg [BRAM_ADDR_WIDTH-1:0] bram_voxelpoint_addr,  // 10-bit Address
-    output reg [BRAM_DATA_WIDTH-1:0] bram_voxelpoint_wrdata,  // 256-bit Data
+    output reg [BRAM_DATA_WIDTH/BYTE_WIDTH-1:0] bram_voxelpoint_bwen,
+    output reg [BRAM_ADDR_WIDTH-1:0] bram_voxelpoint_addr,
+    output reg [BRAM_DATA_WIDTH-1:0] bram_voxelpoint_wrdata,
     // BRAM_VOXELPOINT_A
-    output wire bram_expire_clk_a,
-    output wire [BRAM_ADDR_WIDTH-1:0] bram_expire_addr_a,  // 10-bit Address
-    input wire [BRAM_DATA_WIDTH-1:0] bram_expire_rdata_a,  // 256-bit Data
+    output wire [BRAM_ADDR_WIDTH-1:0] bram_expire_addr_a,
+    input wire [BRAM_DATA_WIDTH-1:0] bram_expire_rdata_a,
     // BRAM_VOXELPOINT_B
-    output wire bram_expire_clk_b,
-    output wire bram_expire_rst_b,
     output wire bram_expire_wr_b,
-    output wire [BRAM_ADDR_WIDTH_PFE-1:0] bram_expire_addr_b,  // 10-bit Address
-    output wire [BRAM_DATA_WIDTH/9-1:0] bram_expire_bwen_b,
-    output wire [BRAM_DATA_WIDTH-1:0] bram_expire_wrdata_b,  // 256-bit Data
+    output wire [BRAM_ADDR_WIDTH_PFE-1:0] bram_expire_addr_b,
+    output wire [BRAM_DATA_WIDTH-1:0] bram_expire_wrdata_b,
     // AXI-Stream out (expire voxel coordinates)
     output wire m_axis_expire_tvalid,
     input wire m_axis_expire_tready,
@@ -546,16 +540,16 @@ module voxel_coor_pipe #(
         .out_idx             (hash_out_idx),           // 0-255
         .out_point_number    (hash_out_point_number),  // 1-20
         .table_full          (hash_table_full),
-        .bram_expire_clk_a   (bram_expire_clk_a),
+        // .bram_expire_clk_a   (bram_expire_clk_a),
         // .bram_expire_rst_a   (bram_expire_rst_a),
         // .bram_expire_wr_a    (bram_expire_wr_a),
         // .bram_expire_bwen_a  (bram_expire_bwen_a),     // 32-bit Byte Enable
         .bram_expire_addr_a  (bram_expire_addr_a),     // 10-bit Address
         .bram_expire_rdata_a (bram_expire_rdata_a),    // 256-bit Data
-        .bram_expire_clk_b   (bram_expire_clk_b),
-        .bram_expire_rst_b   (bram_expire_rst_b),
+        // .bram_expire_clk_b   (bram_expire_clk_b),
+        // .bram_expire_rst_b   (bram_expire_rst_b),
         .bram_expire_wr_b    (bram_expire_wr_b),
-        .bram_expire_bwen_b  (bram_expire_bwen_b),     // 32-bit Byte Enable
+        // .bram_expire_bwen_b  (bram_expire_bwen_b),     // 32-bit Byte Enable
         .bram_expire_addr_b  (bram_expire_addr_b),     // 10-bit Address
         .bram_expire_wrdata_b(bram_expire_wrdata_b),   // 256-bit Data
         .m_axis_expire_tready(m_axis_expire_tready),

@@ -497,51 +497,30 @@ module pfn_layer #(
 
     integer pt_cnt;
     integer out_pt_cnt;
-    integer frame_id; // 新增：用于跟踪当前录制的是第几帧
-
-    // 新增：把文件打开和写表头的过程封装成 task
-    task open_csv_files;
-        input integer f_id;
-        begin
-            // 动态生成文件名，如 pfn_layer_out_f0.csv, pfn_layer_out_f1.csv
-            csv_fd = $fopen($sformatf("pfn_layer_out_f%0d.csv", f_id), "w");
-            if (csv_fd != 0) begin
-                $fwrite(csv_fd, "time,voxel_x,voxel_y,pt_cnt");
-                for (out_i = 0; out_i < OUT_PT_DIM; out_i = out_i + 1) begin
-                    $fwrite(csv_fd, ",dim%0d", out_i);
-                end
-                $fwrite(csv_fd, "\n");
-            end
-
-            pfe_csv_fd = $fopen($sformatf("pfn_layer_pfe_input_dec_f%0d.csv", f_id), "w");
-            if (pfe_csv_fd != 0) begin
-                $fwrite(pfe_csv_fd, "time,voxel_x,voxel_y");
-                for (pfe_i = EXPAND_PT_DIM - 1; pfe_i >= 0; pfe_i = pfe_i - 1) begin
-                    $fwrite(pfe_csv_fd, ",dim%0d", pfe_i);
-                end
-                $fwrite(pfe_csv_fd, "\n");
-            end
-        end
-    endtask
 
     initial begin
         pt_cnt     = 0;
         out_pt_cnt = 0;
-        frame_id   = 0;
-        open_csv_files(frame_id);  // 打开第一帧的文件
-    end
 
-    // 新增：监听模块内部的清零信号，当一帧完全排空时，关闭旧文件，打开新文件
-    always @(posedge clk) begin
-        if (rst_n && pfn_frame_clear) begin
-            $fclose(csv_fd);
-            $fclose(pfe_csv_fd);
-            frame_id = frame_id + 1;
-            open_csv_files(frame_id);
-            $display("[%0t] PFN Layer: 帧切换！开始写入第 %0d 帧数据...", $time, frame_id);
+        csv_fd     = $fopen("pfn_layer_out.csv", "w");
+        if (csv_fd != 0) begin
+            $fwrite(csv_fd, "time,voxel_x,voxel_y,pt_cnt");
+            for (out_i = 0; out_i < OUT_PT_DIM; out_i = out_i + 1) begin
+                $fwrite(csv_fd, ",dim%0d", out_i);
+            end
+            $fwrite(csv_fd, "\n");
+        end
+
+        pfe_csv_fd = $fopen("pfn_layer_pfe_input_dec.csv", "w");
+        if (pfe_csv_fd != 0) begin
+            $fwrite(pfe_csv_fd, "time,voxel_x,voxel_y");
+            for (pfe_i = EXPAND_PT_DIM - 1; pfe_i >= 0; pfe_i = pfe_i - 1) begin
+                $fwrite(pfe_csv_fd, ",dim%0d", pfe_i);
+            end
+            $fwrite(pfe_csv_fd, "\n");
         end
     end
-    
+
     // Simulation log: input
     always @(posedge clk) begin
         if (rst_n && s_axis_pfe_valid && s_axis_pfe_tready) begin

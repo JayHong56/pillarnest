@@ -17,27 +17,15 @@ module voxelize #(
     input wire clk_n,
     input wire rst_n
 );
-    localparam integer MEM_FILE_LENGTH = 115968;
-
-    // 这里把 dram_read_en 改成由 always 块驱动的 reg
-    reg                          dram_read_en;
+    localparam integer MEM_FILE_LENGTH = 116000;
+    reg                          dram_read_en = 1'b1;
     reg                          dram_write_en = 1'b0;
-
-    // 1. AXI adapter 读取总数设为 2 帧的量
-    wire [DRAM_ADDR_WIDTH - 1:0] dram_write_size = MEM_FILE_LENGTH * 2;
-
+    wire [DRAM_ADDR_WIDTH - 1:0] dram_write_size = MEM_FILE_LENGTH;
     wire [DRAM_ADDR_WIDTH - 1:0] dram_read_address;
     wire [DRAM_DATA_WIDTH - 1:0] dram_data_out;
-
-    // 2. 地址回卷：超过一帧长度时，减去一帧长度，使其在 0 ~ MEM_FILE_LENGTH-1 之间循环
-    wire [DRAM_ADDR_WIDTH - 1:0] wrapped_read_address;
-    assign wrapped_read_address = (dram_read_address >= MEM_FILE_LENGTH[DRAM_ADDR_WIDTH-1:0]) ? 
-                                  (dram_read_address - MEM_FILE_LENGTH[DRAM_ADDR_WIDTH-1:0]) : 
-                                  dram_read_address;
-
     dram #(
         .DATA_WIDTH     (DRAM_DATA_WIDTH),
-        .ADDR_WIDTH     (DRAM_ADDR_WIDTH),
+        .ADDR_WIDTH     (DRAM_ADDR_WIDTH),                                                      // 65536 depth
         .MEM_FILE       ("E:\\mmdetection3d\\data\\kitti\\scripts\\data\\points_sim_bin.txt"),
         .MEM_FILE_LENGTH(MEM_FILE_LENGTH)
     ) u_pointcloud_dram (
@@ -46,78 +34,29 @@ module voxelize #(
         .en           (dram_read_en),
         .we           (dram_write_en),
         .write_address(),
-        .read_address (wrapped_read_address),  // 送入回卷后的地址
+        .read_address (dram_read_address),
         .data_in      (),
         .data_out     (dram_data_out)
     );
 
     // =========================================================================
-    // 多帧读取控制状态机与帧末信号 (Frame End) 生成
+    // 帧末清空信号 (Frame End) 生成与延迟补偿逻辑
     // =========================================================================
-    localparam ST_READ_FRAME_0 = 3'd0;
-    localparam ST_WAIT_FLUSH_1 = 3'd1;
-    localparam ST_READ_FRAME_1 = 3'd2;
-    localparam ST_WAIT_FLUSH_2 = 3'd3;  // 新增：等待第二帧排空
-    localparam ST_DONE = 3'd4;
-
-    reg [2:0] sim_state;  // 位宽修改为 3 bit
     reg frame_end_raw;
-
-    // 确保你的顶层声明了这个 wire 并且连到了 u_pfn_layer 上
-    wire m_axis_pfn_flush_done;
+    reg read_done_flag;
 
     always @(posedge clk_p or negedge rst_n) begin
         if (!rst_n) begin
-            sim_state     <= ST_READ_FRAME_0;
-            dram_read_en  <= 1'b1;
-            frame_end_raw <= 1'b0;
+            frame_end_raw  <= 1'b0;
+            read_done_flag <= 1'b0;
         end else begin
-            // 默认不拉高，只在特定条件拉高一拍作为脉冲
-            frame_end_raw <= 1'b0;
-
-            case (sim_state)
-                ST_READ_FRAME_0: begin
-                    // 第一帧数据刚读完
-                    if (dram_read_address == MEM_FILE_LENGTH[DRAM_ADDR_WIDTH-1:0]) begin
-                        dram_read_en  <= 1'b0;  // 立即掐断 DRAM 读取，暂停 adapter
-                        frame_end_raw <= 1'b1;  // 触发第一帧的帧末脉冲
-                        sim_state     <= ST_WAIT_FLUSH_1;  // 进入死等状态
-                        $display("[%0t] [SIM] 第一帧读入完毕，等待流水线 Flush...", $time);
-                    end
-                end
-
-                ST_WAIT_FLUSH_1: begin
-                    // 严格等待底层的 pfn_flush_done
-                    if (m_axis_pfn_flush_done) begin
-                        dram_read_en <= 1'b1;  // 恢复读入
-                        sim_state    <= ST_READ_FRAME_1;
-                        $display("[%0t] [SIM] 第一帧排空完成！开始注入第二帧...", $time);
-                    end
-                end
-
-                ST_READ_FRAME_1: begin
-                    // 第二帧读完
-                    if (dram_read_address == (MEM_FILE_LENGTH * 2)) begin
-                        dram_read_en  <= 1'b0;
-                        frame_end_raw <= 1'b1;  // 触发第二帧的帧末脉冲
-                        sim_state     <= ST_WAIT_FLUSH_2;  // 进入新的等待状态
-                        $display("[%0t] [SIM] 第二帧读入完毕，等待流水线 Flush...", $time);
-                    end
-                end
-
-                ST_WAIT_FLUSH_2: begin
-                    // 等待第二帧也彻底处理完并在末端输出完毕
-                    if (m_axis_pfn_flush_done) begin
-                        sim_state <= ST_DONE;
-                        $display("[%0t] [SIM] 第二帧排空完成！仿真顺利结束。", $time);
-                        $stop;  // 触发仿真器暂停，如果你想直接退出仿真器可以换成 $finish
-                    end
-                end
-
-                ST_DONE: begin
-                    dram_read_en <= 1'b0;
-                end
-            endcase
+            // 核心条件：当读地址等于 MEM_FILE_LENGTH，且之前没触发过
+            if ((dram_read_address == MEM_FILE_LENGTH[DRAM_ADDR_WIDTH-1:0]) && !read_done_flag) begin
+                frame_end_raw  <= 1'b1;
+                read_done_flag <= 1'b1;  // 锁定，保证只产生一个单周期脉冲
+            end else begin
+                frame_end_raw <= 1'b0;
+            end
         end
     end
 
@@ -135,6 +74,8 @@ module voxelize #(
     // 然后调整这里的索引用以对齐 (这里暂时设定为 30 拍)
     wire frame_end = frame_end_shift[30];
     wire flush_done;
+
+
 
 
     wire m_axis_dram_last;
@@ -342,12 +283,12 @@ module voxelize #(
     wire [OUT_PT_DIM*PT_WIDTH-1:0] pfn1_in_data;
 
     wire meta0_valid;
-    wire meta0_ready = 1'b1;  // 暂时不对 metadata 路径进行 backpressure
+    wire meta0_ready;  // 暂时不对 metadata 路径进行 backpressure
     wire signed [COORD_WIDTH-1:0] meta0_x;
     wire signed [COORD_WIDTH-1:0] meta0_y;
 
     wire meta1_valid;
-    wire meta1_ready = 1'b1;  // 暂时不对 metadata 路径进行 backpressure
+    wire meta1_ready;  // 暂时不对 metadata 路径进行 backpressure
     wire signed [COORD_WIDTH-1:0] meta1_x;
     wire signed [COORD_WIDTH-1:0] meta1_y;
 
@@ -474,19 +415,36 @@ module voxelize #(
         .rd_data(bram_pfe_rdata)
     );
 
-    wire m_axis_cmd_tvalid;
-    wire m_axis_cmd_tready;
-    wire [72-1:0] m_axis_cmd_tdata;  // 这里的地址是相对于某个基地址的偏移，单位是“数据宽度”（比如128bit）
-    voxel_scatter_addr_gen u_voxel_scatter_addr_gen (
+    wire m_axis_0_cmd_tvalid;
+    wire m_axis_0_cmd_tready;
+    wire [72-1:0] m_axis_0_cmd_tdata;  // 这里的地址是相对于某个基地址的偏移，单位是“数据宽度”（比如128bit）
+    voxel_scatter_addr_gen u_voxel_scatter_0_addr_gen (
         .aclk             (clk_p),
         .aresetn          (rst_n),
         .base_addr_in     (32'h10000000),
-        .s_voxel_valid    (m_axis_pfn_voxel_valid),
-        .s_voxel_x        (m_axis_pfn_voxel_x),
-        .s_voxel_y        (m_axis_pfn_voxel_y),
-        .m_axis_cmd_tvalid(m_axis_cmd_tvalid),
+        .s_voxel_valid    (meta0_valid),
+        .s_voxel_ready    (meta0_ready),
+        .s_voxel_x        (meta0_x),
+        .s_voxel_y        (meta0_y),
+        .m_axis_cmd_tvalid(m_axis_0_cmd_tvalid),
         .m_axis_cmd_tready(1'b1),
-        .m_axis_cmd_tdata (m_axis_cmd_tdata)
+        .m_axis_cmd_tdata (m_axis_0_cmd_tdata)
+    );
+
+    wire m_axis_1_cmd_tvalid;
+    wire m_axis_1_cmd_tready;
+    wire [72-1:0] m_axis_1_cmd_tdata;  // 这里的地址是相对于某个基地址的偏移，单位是“数据宽度”（比如128bit）
+    voxel_scatter_addr_gen u_voxel_scatter_1_addr_gen (
+        .aclk             (clk_p),
+        .aresetn          (rst_n),
+        .base_addr_in     (32'h10000000),
+        .s_voxel_valid    (meta1_valid),
+        .s_voxel_ready    (meta1_ready),
+        .s_voxel_x        (meta1_x),
+        .s_voxel_y        (meta1_y),
+        .m_axis_cmd_tvalid(m_axis_1_cmd_tvalid),
+        .m_axis_cmd_tready(1'b1),
+        .m_axis_cmd_tdata (m_axis_1_cmd_tdata)
     );
 
 
