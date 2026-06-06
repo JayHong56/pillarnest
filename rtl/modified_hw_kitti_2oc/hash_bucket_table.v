@@ -88,7 +88,7 @@ module hash_bucket_table #(
         .wdata2_b(wdata2_b),
         .wdata3_b(wdata3_b)
     );
-
+    
     reg we0_a_shadow, we1_a_shadow, we2_a_shadow, we3_a_shadow;
     wire [ENTRY_WIDTH-1:0] rdata0_a_shadow, rdata1_a_shadow, rdata2_a_shadow, rdata3_a_shadow;
     hash_bucket_array_shadow #(
@@ -183,6 +183,7 @@ module hash_bucket_table #(
     wire action_free;
     wire action_kill;
     wire action_full;
+
     // action_hit/free 可以在 expired 有效，无法在valid、write有效
     // 因为s0 s1状态机只能在write运转
     wire did_write = (action_hit_base | action_hit_cam | action_free) & (!hash_stall);
@@ -312,6 +313,7 @@ module hash_bucket_table #(
     assign {st[1], kx[1], ky[1], pn[1], ts[1]} = rdata1_a_eff;
     assign {st[2], kx[2], ky[2], pn[2], ts[2]} = rdata2_a_eff;
     assign {st[3], kx[3], ky[3], pn[3], ts[3]} = rdata3_a_eff;
+
 
     // shadow array select signal
     wire [BUCKET_SLOT_WIDTH-1:0] a_we_shadow;
@@ -692,12 +694,12 @@ module hash_bucket_table #(
 
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            s0_valid    <= 1'b0;
-            s1_valid    <= 1'b0;
+            s0_valid <= 1'b0;
+            s1_valid <= 1'b0;
 
         end else if (flush_done) begin
-            s0_valid    <= 1'b0;
-            s1_valid    <= 1'b0;
+            s0_valid <= 1'b0;
+            s1_valid <= 1'b0;
 
         end else begin
             if (!pipe_stall) begin
@@ -924,13 +926,31 @@ module hash_bucket_table #(
     // ===================================================================
     // 2. 负载随时间变化的监控与打印逻辑
     // ===================================================================
+    // ===================================================================
+    // 2. 负载随时间变化的监控与打印逻辑
+    // ===================================================================
     integer fp_load;
     reg [TIMER_WIDTH-1:0] global_timer_d1;
 
+    // ----------------------------------------------------
+    // 【新增】：组合逻辑动态计算 cam_load 
+    // ----------------------------------------------------
+    reg [4:0] cam_load;  // CAM_DEPTH=16，最大值16需要5位
+    integer c_i;
+    always @(*) begin
+        cam_load = 0;
+        for (c_i = 0; c_i < CAM_DEPTH; c_i = c_i + 1) begin
+            if (cam_valid[c_i]) begin
+                cam_load = cam_load + 1'b1;
+            end
+        end
+    end
+    // ----------------------------------------------------
+
     initial begin
         // 新建一个独立的 csv 文件用于专门绘制负载曲线
-        fp_load = $fopen("hash_load_over_time.csv", "w");
-        $fwrite(fp_load, "Global_Timer, Total_Load\n");
+        fp_load = $fopen("hash_load_over_time_mulhash.csv", "w");
+        $fwrite(fp_load, "Global_Timer,Total_Load,cam_load\n");
     end
 
     always @(posedge clk) begin
@@ -944,7 +964,7 @@ module hash_bucket_table #(
                 //          TABLE_SIZE);
 
                 // 核心修改 3：写入专用的 CSV 文件
-                $fwrite(fp_load, "%0d, %0d\n", global_timer, current_total_load);
+                $fwrite(fp_load, "%0d, %0d, %0d\n", global_timer, current_total_load, cam_load);
             end
         end
     end

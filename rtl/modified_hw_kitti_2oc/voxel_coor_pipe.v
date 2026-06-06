@@ -63,6 +63,7 @@ module voxel_coor_pipe #(
     localparam integer POINTS_PER_ROW = BRAM_DATA_WIDTH / PT_WIDTH_PER;  // 504/72 = 7
     localparam integer EXPEND_VOXEL_ROW = (MAX_VOXEL_NUM + POINTS_PER_ROW - 1) / POINTS_PER_ROW;  // ceil(20/7)=3
     localparam integer RAW_PT_WIDTH = 4 * PT_WIDTH_FLOAT32;  // 128 bit
+    localparam [VN_WIDTH-1:0] MAX_VOXEL_POINTS = MAX_VOXEL_NUM[VN_WIDTH-1:0];
     // BRAM clk/rst
 
     wire                          hash_req_ready;
@@ -115,10 +116,10 @@ module voxel_coor_pipe #(
     wire [PT_WIDTH_FLOAT32-1:0] point_z_float32;
     wire [PT_WIDTH_FLOAT32-1:0] point_i_float32;
 
-    assign point_i_float32 = point_raw_r[127:96];
-    assign point_z_float32 = point_raw_r[95:64];
-    assign point_y_float32 = point_raw_r[63:32];
-    assign point_x_float32 = point_raw_r[31:0];
+    assign point_x_float32 = point_raw_r[127:96];
+    assign point_y_float32 = point_raw_r[95:64];
+    assign point_z_float32 = point_raw_r[63:32];
+    assign point_i_float32 = point_raw_r[31:0];
 
     wire signed [PT_WIDTH_XY-1:0] point_x_fix20_data;
     wire signed [PT_WIDTH_XY-1:0] point_y_fix20_data;
@@ -373,7 +374,109 @@ module voxel_coor_pipe #(
     reg [PT_WIDTH_PER-1:0] pproc_d1, pproc_d2, pproc_d3;
     reg hash_req_ready_1delay;
     reg pproc_drop_d1, pproc_drop_d2, pproc_drop_d3;
+    reg [5:0] full_voxel_lfsr;
+    reg [BRAM_ADDR_WIDTH-1:0] full_rand_row_d1, full_rand_row_d2, full_rand_row_d3;
+    reg [$clog2(POINTS_PER_ROW)-1:0] full_rand_slot_d1, full_rand_slot_d2, full_rand_slot_d3;
+    reg [5:0] full_rand_value_d1, full_rand_value_d2, full_rand_value_d3;
+    reg [7:0] full_point_count[0:(1 << HASH_ADDR_WIDTH)-1];
+    integer full_cnt_i;
 
+    wire full_voxel_lfsr_feedback = full_voxel_lfsr[5] ^ full_voxel_lfsr[4];
+
+    function [4:0] full_rand_choice_21;
+        input [5:0] lfsr_state;
+        reg [5:0] nonzero_state;
+        reg [5:0] choice6;
+        begin
+            nonzero_state = (lfsr_state == 6'd0) ? 6'd1 : lfsr_state;
+            if (nonzero_state <= 6'd21) begin
+                choice6 = nonzero_state - 6'd1;
+            end else if (nonzero_state <= 6'd42) begin
+                choice6 = nonzero_state - 6'd22;
+            end else begin
+                choice6 = nonzero_state - 6'd43;
+            end
+            full_rand_choice_21 = choice6[4:0];
+        end
+    endfunction
+
+    function [BRAM_ADDR_WIDTH-1:0] full_rand_row_offset;
+        input [4:0] choice;
+        begin
+            if (choice < 5'd7) begin
+                full_rand_row_offset = {BRAM_ADDR_WIDTH{1'b0}};
+            end else if (choice < 5'd14) begin
+                full_rand_row_offset = {{(BRAM_ADDR_WIDTH - 1) {1'b0}}, 1'b1};
+            end else begin
+                full_rand_row_offset = {{(BRAM_ADDR_WIDTH - 2) {1'b0}}, 2'd2};
+            end
+        end
+    endfunction
+
+    function [$clog2(POINTS_PER_ROW)-1:0] full_rand_slot_idx;
+        input [4:0] choice;
+        begin
+            case (choice)
+                5'd0, 5'd7, 5'd14: full_rand_slot_idx = 3'd0;
+                5'd1, 5'd8, 5'd15: full_rand_slot_idx = 3'd1;
+                5'd2, 5'd9, 5'd16: full_rand_slot_idx = 3'd2;
+                5'd3, 5'd10, 5'd17: full_rand_slot_idx = 3'd3;
+                5'd4, 5'd11, 5'd18: full_rand_slot_idx = 3'd4;
+                5'd5, 5'd12, 5'd19: full_rand_slot_idx = 3'd5;
+                5'd6, 5'd13: full_rand_slot_idx = 3'd6;
+                default: full_rand_slot_idx = 3'd0;
+            endcase
+        end
+    endfunction
+
+    wire [4:0] full_rand_choice = full_rand_choice_21(full_voxel_lfsr);
+    wire [BRAM_ADDR_WIDTH-1:0] full_rand_row_next = full_rand_row_offset(full_rand_choice);
+    wire [$clog2(POINTS_PER_ROW)-1:0] full_rand_slot_next = full_rand_slot_idx(full_rand_choice);
+
+    function [5:0] full_keep_threshold;
+        input [7:0] total_count;
+        begin
+            case (total_count)
+                8'd0, 8'd1, 8'd2, 8'd3, 8'd4, 8'd5, 8'd6, 8'd7,
+                8'd8, 8'd9, 8'd10, 8'd11, 8'd12, 8'd13, 8'd14, 8'd15,
+                8'd16, 8'd17, 8'd18, 8'd19, 8'd20: full_keep_threshold = 6'd63;
+                8'd21: full_keep_threshold = 6'd60;
+                8'd22: full_keep_threshold = 6'd57;
+                8'd23: full_keep_threshold = 6'd54;
+                8'd24: full_keep_threshold = 6'd52;
+                8'd25: full_keep_threshold = 6'd50;
+                8'd26: full_keep_threshold = 6'd48;
+                8'd27: full_keep_threshold = 6'd46;
+                8'd28: full_keep_threshold = 6'd45;
+                8'd29: full_keep_threshold = 6'd43;
+                8'd30: full_keep_threshold = 6'd42;
+                8'd31: full_keep_threshold = 6'd40;
+                8'd32: full_keep_threshold = 6'd39;
+                default: begin
+                    if (total_count <= 8'd36) begin
+                        full_keep_threshold = 6'd35;
+                    end else if (total_count <= 8'd42) begin
+                        full_keep_threshold = 6'd30;
+                    end else if (total_count <= 8'd50) begin
+                        full_keep_threshold = 6'd25;
+                    end else if (total_count <= 8'd63) begin
+                        full_keep_threshold = 6'd20;
+                    end else if (total_count <= 8'd84) begin
+                        full_keep_threshold = 6'd15;
+                    end else if (total_count <= 8'd126) begin
+                        full_keep_threshold = 6'd10;
+                    end else if (total_count <= 8'd180) begin
+                        full_keep_threshold = 6'd7;
+                    end else begin
+                        full_keep_threshold = 6'd5;
+                    end
+                end
+            endcase
+        end
+    endfunction
+
+
+    
     wire pipe_pproc_stall = hash_req_ready;
     wire pipe_bram_stall = hash_req_ready_1delay;
     always @(posedge clk or negedge rst_n) begin
@@ -384,10 +487,29 @@ module voxel_coor_pipe #(
             pproc_drop_d1 <= 1'b0;
             pproc_drop_d2 <= 1'b0;
             pproc_drop_d3 <= 1'b0;
+            full_rand_row_d1  <= {BRAM_ADDR_WIDTH{1'b0}};
+            full_rand_row_d2  <= {BRAM_ADDR_WIDTH{1'b0}};
+            full_rand_row_d3  <= {BRAM_ADDR_WIDTH{1'b0}};
+            full_rand_slot_d1 <= {$clog2(POINTS_PER_ROW) {1'b0}};
+            full_rand_slot_d2 <= {$clog2(POINTS_PER_ROW) {1'b0}};
+            full_rand_slot_d3 <= {$clog2(POINTS_PER_ROW) {1'b0}};
+            full_rand_value_d1 <= 6'd1;
+            full_rand_value_d2 <= 6'd1;
+            full_rand_value_d3 <= 6'd1;
         end else if (pipe_pproc_stall) begin  // pproc_d3需要和 hash_out_idx对齐
             pproc_drop_d1 <= !pipe1_keep_point;
             pproc_drop_d2 <= pproc_drop_d1;
             pproc_drop_d3 <= pproc_drop_d2;
+
+            full_rand_row_d1  <= full_rand_row_next;
+            full_rand_row_d2  <= full_rand_row_d1;
+            full_rand_row_d3  <= full_rand_row_d2;
+            full_rand_slot_d1 <= full_rand_slot_next;
+            full_rand_slot_d2 <= full_rand_slot_d1;
+            full_rand_slot_d3 <= full_rand_slot_d2;
+            full_rand_value_d1 <= full_voxel_lfsr;
+            full_rand_value_d2 <= full_rand_value_d1;
+            full_rand_value_d3 <= full_rand_value_d2;
 
             pproc_vld_d1  <= hash_fire;
             pproc_vld_d2  <= pproc_vld_d1;
@@ -399,6 +521,13 @@ module voxel_coor_pipe #(
         end
     end
 
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            full_voxel_lfsr <= 6'h2d;
+        end else if (hash_fire) begin
+            full_voxel_lfsr <= {full_voxel_lfsr[4:0], full_voxel_lfsr_feedback};
+        end
+    end
 
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
@@ -414,6 +543,19 @@ module voxel_coor_pipe #(
     wire [BRAM_ADDR_WIDTH-1:0] row_offset = pt_idx_minus_1 / POINTS_PER_ROW;
     wire [$clog2(POINTS_PER_ROW)-1:0] bram_slot_idx = pt_idx_minus_1 % POINTS_PER_ROW;
     wire [BRAM_ADDR_WIDTH-1:0] bram_row_addr = (hash_out_idx * EXPEND_VOXEL_ROW) + row_offset;
+    wire hash_point_number_valid = (hash_out_point_number <= MAX_VOXEL_POINTS) && (hash_out_point_number != {VN_WIDTH{1'b0}});
+    wire [7:0] max_voxel_points_u8 = {{(8 - VN_WIDTH) {1'b0}}, MAX_VOXEL_POINTS};
+    wire [7:0] hash_point_number_u8 = {{(8 - VN_WIDTH) {1'b0}}, hash_out_point_number};
+    wire [7:0] full_point_count_cur = full_point_count[hash_out_idx];
+    wire hash_point_number_full = (hash_out_point_number == MAX_VOXEL_POINTS) && (full_point_count_cur >= max_voxel_points_u8);
+    wire [7:0] full_point_count_inc = (full_point_count_cur == 8'hff) ? 8'hff : (full_point_count_cur + 8'd1);
+    wire [7:0] full_point_count_next = hash_point_number_full ? full_point_count_inc : hash_point_number_u8;
+    wire [5:0] full_keep_threshold_sel = full_keep_threshold(full_point_count_next);
+    wire full_voxel_random_write = !hash_point_number_full || (full_rand_value_d3 <= full_keep_threshold_sel);
+    wire [BRAM_ADDR_WIDTH-1:0] bram_write_addr_sel =
+        hash_point_number_full ? ((hash_out_idx * EXPEND_VOXEL_ROW) + full_rand_row_d3) : bram_row_addr;
+    wire [$clog2(POINTS_PER_ROW)-1:0] bram_slot_idx_sel =
+        hash_point_number_full ? full_rand_slot_d3 : bram_slot_idx;
 
     localparam integer CHUNKS_PER_POINT = PT_WIDTH_PER / BYTE_WIDTH;  // 72/9 = 8
     function [BRAM_DATA_WIDTH/BYTE_WIDTH-1:0] slot_bwen_64;
@@ -431,6 +573,9 @@ module voxel_coor_pipe #(
             bram_voxelpoint_wr     <= 1'b0;
             bram_voxelpoint_bwen   <= {BRAM_DATA_WIDTH / BYTE_WIDTH{1'b0}};
             bram_voxelpoint_addr   <= {BRAM_ADDR_WIDTH{1'b0}};
+            for (full_cnt_i = 0; full_cnt_i < (1 << HASH_ADDR_WIDTH); full_cnt_i = full_cnt_i + 1) begin
+                full_point_count[full_cnt_i] <= 8'd0;
+            end
         end else begin
             bram_voxelpoint_wr   <= 1'b0;
             bram_voxelpoint_bwen <= {BRAM_DATA_WIDTH / BYTE_WIDTH{1'b0}};
@@ -438,11 +583,14 @@ module voxel_coor_pipe #(
             if (pipe_bram_stall) begin
                 // hash_found 表示 hit 或者新插入成功；table_full 时 found=0
                 // 同时加一个上限：每体素最多 20 点
-                if (!pproc_drop_d3 && (hash_out_point_number <= MAX_VOXEL_NUM[VN_WIDTH-1:0]) && (hash_out_point_number != {VN_WIDTH{1'b0}})) begin
-                    bram_voxelpoint_wr     <= 1'b1;
-                    bram_voxelpoint_addr   <= bram_row_addr;
-                    bram_voxelpoint_wrdata <= {POINTS_PER_ROW{pproc_d3}};
-                    bram_voxelpoint_bwen   <= slot_bwen_64(bram_slot_idx);
+                if (!pproc_drop_d3 && hash_point_number_valid) begin
+                    full_point_count[hash_out_idx] <= full_point_count_next;
+                    if (full_voxel_random_write) begin
+                        bram_voxelpoint_wr     <= 1'b1;
+                        bram_voxelpoint_addr   <= bram_write_addr_sel;
+                        bram_voxelpoint_wrdata <= {POINTS_PER_ROW{pproc_d3}};
+                        bram_voxelpoint_bwen   <= slot_bwen_64(bram_slot_idx_sel);
+                    end
                 end
             end
         end

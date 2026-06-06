@@ -56,7 +56,12 @@ module s2mm_clear_lane0_adapter #(
     // From AXI DataMover S2MM status output
     input  wire [                  7:0] dm_s2mm_sts_tdata,
     input  wire                         dm_s2mm_sts_tvalid,
-    output wire                         dm_s2mm_sts_tready
+    output wire                         dm_s2mm_sts_tready,
+
+    // Normal-path drain status for frame-boundary control.
+    output wire                         normal_path_idle,
+    output reg                          normal_status_error,
+    output reg  [                 15:0] normal_outstanding_count
 );
 
     wire                         clear_cmd_tvalid;
@@ -71,12 +76,50 @@ module s2mm_clear_lane0_adapter #(
     wire                         clear_sts_tvalid;
     wire                         clear_sts_tready;
 
-    // Normal S2MM status is simply consumed when not clearing.
-    // If you already have a normal status checker, replace these wires with
-    // its connection instead of tying ready high.
+    // Normal S2MM status is consumed when not clearing, but now we also
+    // count it so the frame boundary can wait for true output drain.
     wire [                  7:0] normal_sts_tdata;
     wire                         normal_sts_tvalid;
     wire                         normal_sts_tready = 1'b1;
+
+    wire normal_cmd_fire = normal_cmd_tvalid && normal_cmd_tready;
+    wire normal_sts_fire = normal_sts_tvalid && normal_sts_tready;
+
+    always @(posedge aclk or negedge aresetn) begin
+        if (!aresetn) begin
+            normal_outstanding_count <= 16'd0;
+            normal_status_error      <= 1'b0;
+        end else begin
+            case ({normal_cmd_fire, normal_sts_fire})
+                2'b10: begin
+                    if (normal_outstanding_count != 16'hFFFF)
+                        normal_outstanding_count <= normal_outstanding_count + 1'b1;
+                    else
+                        normal_status_error <= 1'b1;
+                end
+                2'b01: begin
+                    if (normal_outstanding_count != 16'd0)
+                        normal_outstanding_count <= normal_outstanding_count - 1'b1;
+                    else
+                        normal_status_error <= 1'b1;
+                end
+                default: begin
+                    normal_outstanding_count <= normal_outstanding_count;
+                end
+            endcase
+
+            if (normal_sts_fire) begin
+                if ((normal_sts_tdata[7] == 1'b0) || (|normal_sts_tdata[6:4]))
+                    normal_status_error <= 1'b1;
+            end
+        end
+    end
+
+    assign normal_path_idle = !clear_busy &&
+                              (normal_outstanding_count == 16'd0) &&
+                              !normal_cmd_tvalid &&
+                              !normal_axis_tvalid &&
+                              !normal_sts_tvalid;
 
     s2mm_clear_writer #(
         .AXIS_DATA_WIDTH(AXIS_DATA_WIDTH),

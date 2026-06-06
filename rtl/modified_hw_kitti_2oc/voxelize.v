@@ -6,7 +6,7 @@ module voxelize #(
     parameter integer AXIS_DATA_WIDTH = 128,
     parameter integer AXIS_ADDR_WIDTH = 16,
     parameter integer BRAM_DATA_WIDTH = 504,  // 64bit * 8points
-    parameter integer BRAM_ADDR_WIDTH = 10,  // HASH_VOXEL_NUMBER(256) * 4brams
+    parameter integer BRAM_ADDR_WIDTH = 10,  // HASH_VOXEL_NUMBER(256) * 3/4
     parameter integer BRAM_ADDR_WIDTH_PFE = 7,
     parameter MEM_WEIGHT_FILE = "E:\\mmdetection3d\\my_output_parameters\\pfn_layer_fused_int_kitti_hardware\\pfn_weight.mem",
     parameter MEM_BIAS_FILE = "E:\\mmdetection3d\\my_output_parameters\\pfn_layer_fused_int_kitti_hardware\\pfn_bias.mem",

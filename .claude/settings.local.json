@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(conda run *)",
+      "Bash(sed -n '75,82p' \"C:\\\\\\\\Users\\\\\\\\86170\\\\\\\\Desktop\\\\\\\\paper\\\\\\\\latex\\\\\\\\paper_en.tex\")",
+      "Bash(cd \"C:\\\\\\\\Users\\\\\\\\86170\\\\\\\\Desktop\\\\\\\\paper\\\\\\\\latex\")",
+      "Bash(sed -i '76s/.*/\\\\t\\\\t      We design a dynamic Pillar Index Generator that maintains the point count, timestamp, and on-chip location of active pillars in real time, and reclaims storage of long-unaccessed pillars based on their life-cycle, enabling front-end index generation with on-chip storage reuse./' paper_en.tex)",
+      "Bash(python3 *)",
+      "Bash(sed -i '81d' paper_en.tex)"
+    ]
+  }
+}

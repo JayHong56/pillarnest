@@ -31,7 +31,7 @@ module pfn_layer #(
     output reg         [   OUT_PT_DIM*PT_WIDTH-1:0] m_axis_pfn_data,
     output wire                                     m_axis_pfn_flush_done
 );
-    localparam integer TDM_FACTOR = 3;
+    localparam integer TDM_FACTOR = 4;
     localparam integer OUT_CHUNK_DIM = (OUT_PT_DIM + TDM_FACTOR - 1) / TDM_FACTOR;  // ceil(64/3)=22
     localparam integer PHASE_W = (TDM_FACTOR <= 2) ? 1 : $clog2(TDM_FACTOR);
     localparam integer LAST_PHASE = TDM_FACTOR - 1;
@@ -39,7 +39,7 @@ module pfn_layer #(
 
 
     localparam integer DEQUANT_SHIFT = 23;
-    localparam signed [16-1:0] DEQUANT_MUL = 16'sd109;  // 3482 = round(2^28 / 77089.47481872393)，其中 256 是量化后的小数放大倍数 (Q8.8)
+    localparam signed [16-1:0] DEQUANT_MUL = 16'sd109;  // 3482 = round(2^28 / 77089.47481872393)，其�?256 是量化后的小数放大倍数 (Q8.8)
     localparam integer PT_CNT_WIDTH = (MAX_VOXEL_NUM <= 1) ? 1 : $clog2(MAX_VOXEL_NUM + 1);
     localparam [PT_CNT_WIDTH-1:0] MAX_VOXEL_NUM_CNT = MAX_VOXEL_NUM;
 
@@ -50,7 +50,7 @@ module pfn_layer #(
             $stop;
         end
     end
-`endif  // 1. 权重与偏置 ROM 
+`endif  // 1. 权重与偏�?ROM 
 
     wire                                        pfn_frame_clear;
     reg signed [EXPAND_PT_DIM*WEIGHT_WIDTH-1:0] weight_row_rom  [0:OUT_PT_DIM-1];
@@ -72,14 +72,14 @@ module pfn_layer #(
     end
 
     // =======================================================
-    // 全局流水线暂停控制 (反压逻辑核心)
+    // 全局流水线暂停控�?(反压逻辑核心)
     // =======================================================
-    // 如果下游不 ready，且当前正在输出有效数据，则冻结整条流水线
+    // 如果下游�?ready，且当前正在输出有效数据，则冻结整条流水�?
     wire pipe_ready = m_axis_pfn_tready || !m_axis_pfn_valid;
 
     // =======================================================
-    // 级联流水线 Stage 1: 输入锁存与乘法运算 (打一拍)
-    // 修复：乘法器操作数提前 Mux，强制复用 DSP 硬件
+    // 级联流水�?Stage 1: 输入锁存与乘法运�?(打一�?
+    // 修复：乘法器操作数提�?Mux，强制复�?DSP 硬件
     // =======================================================
     reg [PHASE_W-1:0] phase;  // 0,1,2,3 四个时分复用阶段
 
@@ -87,8 +87,8 @@ module pfn_layer #(
 
     wire pfe_fire = s_axis_pfe_valid && s_axis_pfe_tready;
 
-    // 当前 voxel 已经接收的有效点数。当前点进入时的点数为 cur_voxel_pt_cnt + 1。
-    // 该计数用于在输出时判断是否存在 padding zero 点。
+    // 当前 voxel 已经接收的有效点数。当前点进入时的点数�?cur_voxel_pt_cnt + 1�?
+    // 该计数用于在输出时判断是否存�?padding zero 点�?
     reg [PT_CNT_WIDTH-1:0] cur_voxel_pt_cnt;
     wire [PT_CNT_WIDTH-1:0] this_point_cnt;
     assign this_point_cnt = cur_voxel_pt_cnt + {{(PT_CNT_WIDTH - 1) {1'b0}}, 1'b1};
@@ -110,7 +110,7 @@ module pfn_layer #(
     reg signed [           COORD_WIDTH-1:0] st2_voxel_y;
     reg        [          PT_CNT_WIDTH-1:0] st2_voxel_pt_cnt;
 
-    // --- 核心修改：新增组合逻辑 Mux 提取操作数 ---
+    // --- 核心修改：新增组合逻辑 Mux 提取操作�?---
     reg signed [              PT_WIDTH-1:0] op_data              [0:EXPAND_PT_DIM-1];
     reg signed [          WEIGHT_WIDTH-1:0] op_weight            [0:OUT_CHUNK_DIM-1] [0:EXPAND_PT_DIM-1];
     reg signed [             ACC_WIDTH-1:0] op_bias              [0:OUT_CHUNK_DIM-1];
@@ -118,15 +118,15 @@ module pfn_layer #(
     integer sel_oc;
 
     always @(*) begin
-        // 1. 数据输入选择：
-        // phase 0 使用当前 s_axis_pfe_data；
-        // phase 1/2/3 使用锁存的 latched_pfe_data。
+        // 1. 数据输入选择�?
+        // phase 0 使用当前 s_axis_pfe_data�?
+        // phase 1/2/3 使用锁存�?latched_pfe_data�?
         for (i_k = 0; i_k < EXPAND_PT_DIM; i_k = i_k + 1) begin
             op_data[i_k] = (phase == {PHASE_W{1'b0}}) ? $signed(s_axis_pfe_data[i_k*PT_WIDTH+:PT_WIDTH]) :
                 $signed(latched_pfe_data[i_k*PT_WIDTH+:PT_WIDTH]);
         end
 
-        // 2. 当前 phase 对应的输出通道范围：
+        // 2. 当前 phase 对应的输出通道范围�?
         // phase 0 -> 0  ~ 11
         // phase 1 -> 12 ~ 23
         // phase 2 -> 24 ~ 35
@@ -177,7 +177,7 @@ module pfn_layer #(
             latched_voxel_valid <= 1'b0;
 
         end else if (pipe_ready) begin
-            // 只在真正接受 PFE 点时更新当前 voxel 点数。
+            // 只在真正接受 PFE 点时更新当前 voxel 点数�?
             if (pfe_fire) begin
                 if (s_axis_pfe_last) begin
                     cur_voxel_pt_cnt <= {PT_CNT_WIDTH{1'b0}};
@@ -201,7 +201,7 @@ module pfn_layer #(
                     latched_voxel_y      <= s_axis_pfe_voxel_y;
                     latched_voxel_pt_cnt <= this_point_cnt;
 
-                    // 控制信号传递
+                    // 控制信号传�?
                     st2_valid            <= 1'b1;
                     st2_phase            <= {PHASE_W{1'b0}};
                     st2_last             <= s_axis_pfe_last;
@@ -210,7 +210,7 @@ module pfn_layer #(
                     st2_voxel_y          <= s_axis_pfe_voxel_y;
                     st2_voxel_pt_cnt     <= this_point_cnt;
 
-                    // 计算当前 phase 对应的 12 个输出通道
+                    // 计算当前 phase 对应�?12 个输出通道
                     for (j = 0; j < OUT_CHUNK_DIM; j = j + 1) begin
                         // st2_bias[j] <= op_bias[j];
                         for (k = 0; k < EXPAND_PT_DIM; k = k + 1) begin
@@ -251,7 +251,7 @@ module pfn_layer #(
         end
     end
     // =======================================================
-    // 级联流水线 Stage 2: 强制加法树 (打一拍)
+    // 级联流水�?Stage 2: 强制加法�?(打一�?
     // =======================================================
     reg                           st3_valid;
     reg        [     PHASE_W-1:0] st3_phase;
@@ -266,19 +266,19 @@ module pfn_layer #(
     integer                       st3_sel_oc;
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            st3_valid        <= 1'b0;
-            st3_phase        <= {PHASE_W{1'b0}};
-            st3_last         <= 1'b0;
-            st3_voxel_valid  <= 1'b0;
+            st3_valid       <= 1'b0;
+            st3_phase       <= {PHASE_W{1'b0}};
+            st3_last        <= 1'b0;
+            st3_voxel_valid <= 1'b0;
 
         end else if (pfn_frame_clear) begin
-            st3_valid        <= 1'b0;
-            st3_phase        <= {PHASE_W{1'b0}};
-            st3_last         <= 1'b0;
-            st3_voxel_valid  <= 1'b0;
+            st3_valid       <= 1'b0;
+            st3_phase       <= {PHASE_W{1'b0}};
+            st3_last        <= 1'b0;
+            st3_voxel_valid <= 1'b0;
 
         end else if (pipe_ready) begin  // 全局停滞控制
-            // 1. 无脑传递控制信号 (把 st2 的状态向后推一拍)
+            // 1. 无脑传递控制信�?(�?st2 的状态向后推一�?
             st3_valid        <= st2_valid;
             st3_phase        <= st2_phase;
             st3_last         <= st2_last;
@@ -287,7 +287,7 @@ module pfn_layer #(
             st3_voxel_y      <= st2_voxel_y;
             st3_voxel_pt_cnt <= st2_voxel_pt_cnt;
 
-            // 2. 数据计算：当有有效数据时，计算 4 级加法树并打入寄存器
+            // 2. 数据计算：当有有效数据时，计�?4 级加法树并打入寄存器
             if (st2_valid) begin
                 for (j_1 = 0; j_1 < OUT_CHUNK_DIM; j_1 = j_1 + 1) begin
                     st3_sel_oc = st2_phase * OUT_CHUNK_DIM + j_1;
@@ -313,7 +313,7 @@ module pfn_layer #(
     end
 
     // =======================================================
-    // 级联流水线 Stage 3: 去量化与 ReLU (纯组合逻辑)
+    // 级联流水�?Stage 3: 去量化与 ReLU (纯组合逻辑)
     // 组合逻辑会随着打过拍的 st3 自动挂起，无需改动
     // =======================================================
     reg        [PT_WIDTH-1:0] relu_comb   [0:OUT_CHUNK_DIM-1];
@@ -335,7 +335,7 @@ module pfn_layer #(
     assign has_padding_point = (st3_voxel_pt_cnt < MAX_VOXEL_NUM_CNT);
 
     // =======================================================
-    // 级联流水线 Stage 4: Max Pool 与 数据输出
+    // 级联流水�?Stage 4: Max Pool �?数据输出
     // =======================================================
     reg     [PT_WIDTH-1:0] pad_max_regs  [0:OUT_PT_DIM-1];
     reg     [PT_WIDTH-1:0] max_pool_regs [0:OUT_PT_DIM-1];
@@ -359,7 +359,7 @@ module pfn_layer #(
     reg [PT_WIDTH-1:0] pad_next_max;
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            m_axis_pfn_valid   <= 1'b0;
+            m_axis_pfn_valid <= 1'b0;
 
             for (oc = 0; oc < OUT_PT_DIM; oc = oc + 1) begin
                 max_pool_regs[oc] <= {PT_WIDTH{1'b0}};
@@ -367,26 +367,26 @@ module pfn_layer #(
             end
 
         end else if (pfn_frame_clear) begin
-            m_axis_pfn_valid   <= 1'b0;
+            m_axis_pfn_valid <= 1'b0;
 
         end else if (pipe_ready) begin
-            // 默认拉低单周期 valid
+            // 默认拉低单周�?valid
             m_axis_pfn_valid <= 1'b0;
 
             if (st3_valid) begin
 
                 // --------------------------------------------------
-                // 如果当前是最后一个 phase，并且当前点是 voxel 的最后一个点，
-                // 则本拍完成最后 12 维的 max，并输出整个 48 维结果。
+                // 如果当前是最后一�?phase，并且当前点�?voxel 的最后一个点�?
+                // 则本拍完成最�?12 维的 max，并输出整个 48 维结果�?
                 // --------------------------------------------------
                 if ((st3_phase == LAST_PHASE[PHASE_W-1:0]) && st3_last) begin
                     m_axis_pfn_valid   <= 1'b1;
                     m_axis_pfn_voxel_x <= st3_voxel_x;
                     m_axis_pfn_voxel_y <= st3_voxel_y;
 
-                    // 先输出前面已经累积在 max_pool_regs 中的通道。
-                    // 如果该 voxel 有 padding zero 点，还要额外和 ReLU(bias) 比一次，
-                    // 等效于软件中 padding zero 点参与 torch.max(x, dim=1)。
+                    // 先输出前面已经累积在 max_pool_regs 中的通道�?
+                    // 如果�?voxel �?padding zero 点，还要额外�?ReLU(bias) 比一次，
+                    // 等效于软件中 padding zero 点参�?torch.max(x, dim=1)�?
                     for (oc = 0; oc < LAST_CHUNK_BASE; oc = oc + 1) begin
                         if (has_padding_point) begin
                             m_axis_pfn_data[oc*PT_WIDTH+:PT_WIDTH] <= pad_max_regs[oc];
@@ -398,8 +398,8 @@ module pfn_layer #(
                         pad_max_regs[oc]  <= bias_relu_rom[oc];
                     end
 
-                    // 输出最后一个 phase 的通道：当前 relu_comb 还没写入 max_pool_regs，
-                    // 所以先比较 valid-point max，再根据需要加入 padding bias baseline。
+                    // 输出最后一�?phase 的通道：当�?relu_comb 还没写入 max_pool_regs�?
+                    // 所以先比较 valid-point max，再根据需要加�?padding bias baseline�?
                     for (oc = 0; oc < OUT_CHUNK_DIM; oc = oc + 1) begin
                         oc_idx = LAST_CHUNK_BASE + oc;
 
@@ -429,7 +429,7 @@ module pfn_layer #(
 
                 end else begin
                     // --------------------------------------------------
-                    // 普通情况：只更新当前 phase 对应的 12 个通道
+                    // 普通情况：只更新当�?phase 对应�?12 个通道
                     // --------------------------------------------------
                     for (oc = 0; oc < OUT_CHUNK_DIM; oc = oc + 1) begin
                         oc_idx = st3_phase * OUT_CHUNK_DIM + oc;
@@ -457,7 +457,7 @@ module pfn_layer #(
         end
     end
     // =========================================================================
-    // 帧尾排空信号传递 (Flush Propagation)
+    // 帧尾排空信号传�?(Flush Propagation)
     // =========================================================================
     reg  pfn_flushing_req;
     reg  m_axis_pfn_flush_done_reg;
@@ -484,7 +484,7 @@ module pfn_layer #(
     assign m_axis_pfn_flush_done = m_axis_pfn_flush_done_reg;
     assign pfn_frame_clear = m_axis_pfn_flush_done_reg;
     // =======================================================
-    // 仿真测试探针区
+    // 仿真测试探针�?
     // =======================================================
 `ifndef SYNTHESIS
     wire test_pfn = s_axis_pfe_voxel_y == 11'sd141 && s_axis_pfe_voxel_x == 11'sd87;
@@ -553,7 +553,7 @@ module pfn_layer #(
         end
     end
 
-    // Simulation log: output (修复：加入 && m_axis_pfn_tready，防止反压时重复写入)
+    // Simulation log: output (修复：加�?&& m_axis_pfn_tready，防止反压时重复写入)
     always @(posedge clk) begin
         if (rst_n && m_axis_pfn_valid && m_axis_pfn_tready) begin
             if (csv_fd != 0) begin

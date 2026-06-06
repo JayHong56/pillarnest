@@ -103,7 +103,7 @@ module voxelize #(
         .m_axis_dram_last (m_axis_dram_last),
         .m_axis_dram_valid(m_axis_dram_valid)
     );
-
+    
 
     localparam COORD_WIDTH = 11;
     localparam PT_WIDTH = 16;

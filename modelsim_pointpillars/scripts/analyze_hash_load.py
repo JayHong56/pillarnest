@@ -409,8 +409,8 @@ if __name__ == "__main__":
     main()
 
 """
-python analyze_hash_load.py ^
-  --csv E:\verilog\pillarnest\modelsim_pointpillars\hash_load_over_time_mulhash.csv ^
+python E:\verilog\pillarnest\modelsim_pointpillars\scripts\analyze_hash_load.py ^
+  --csv E:\verilog\pillarnest\modelsim_pointpillars_32\hash_load_over_time_mulhash.csv ^
   --name mult_hash ^
   --csv2 E:\verilog\pillarnest\modelsim_pointpillars\hash_load_over_time.csv ^
   --name2 h3_hash
